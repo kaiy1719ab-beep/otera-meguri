@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>寺社巡礼録</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -16,9 +16,13 @@
 </head>
 <body>
     <div id="root"></div>
+
     <script type="text/babel">
+        // ライブラリのセットアップ
         const { MapPin, Calendar, Star, BookOpen, Plus, Search, X, Trash2, Pencil, Map, Loader2, Globe, Bot, Send, ImageIcon, ArrowUpDown, User, Cloud, CloudOff } = lucide;
         const { useState, useMemo, useEffect, useRef } = React;
+
+        // Firebase 設定
         const firebaseConfig = {
             apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
             authDomain: "otera-meguri.firebaseapp.com",
@@ -28,13 +32,31 @@
             appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4",
             measurementId: "G-3P3VD1SP42"
         };
-        firebase.initializeApp(firebaseConfig);
+
+        // 初期化（二重初期化防止）
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const auth = firebase.auth();
         const db = firebase.firestore();
         const appId = 'temple-tracker-local';
 
+        // 日本地図コンポーネント
         function JapanMap({ visits }) {
-            const PREFECTURE_MAP = [{ id: '北海道', name: '北海道', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 }, { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 }, { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 }, { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 }, { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 }, { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 }, { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 }, { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈川', x: 12, y: 8 }, { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌山', x: 6,  y: 9 }, { id: '鹿児島県', name: '鹿児島', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 }, { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }];
+            const PREFECTURE_MAP = [
+                { id: '北海道', name: '北海道', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
+                { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
+                { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 },
+                { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 },
+                { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 },
+                { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 },
+                { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 },
+                { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈川', x: 12, y: 8 },
+                { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌山', x: 6,  y: 9 },
+                { id: '鹿児島県', name: '鹿児島', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 },
+                { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }
+            ];
+
             const stats = useMemo(() => {
                 const s = {}; PREFECTURE_MAP.forEach(p => s[p.id] = 0);
                 visits.forEach(v => {
@@ -43,78 +65,90 @@
                 });
                 return s;
             }, [visits]);
+
             return (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-200 overflow-x-auto">
-                    <div className="min-w-[700px] flex justify-center py-4">
-                        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(16, 42px)', gridTemplateRows: 'repeat(12, 42px)' }}>
-                            {PREFECTURE_MAP.map(pref => {
-                                const count = stats[pref.id];
-                                let bgColor = count > 0 ? 'bg-[#2c4c3b] text-white' : 'bg-stone-100 text-stone-400';
-                                return (
-                                    <div key={pref.id} className={`border rounded-md flex items-center justify-center text-[10px] ${bgColor}`} style={{ gridColumn: pref.x + 1, gridRow: pref.y + 1 }}>
-                                        {pref.name}
-                                    </div>
-                                );
-                            })}
-                        </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <div className="grid gap-1 flex justify-center overflow-x-auto" style={{ gridTemplateColumns: 'repeat(16, minmax(30px, 1fr))' }}>
+                        {PREFECTURE_MAP.map(pref => {
+                            const count = stats[pref.id];
+                            return (
+                                <div key={pref.id} 
+                                     className={`border p-1 text-[10px] text-center rounded ${count > 0 ? 'bg-[#2c4c3b] text-white' : 'bg-stone-50'}`} 
+                                     style={{ gridColumn: pref.x + 1, gridRow: pref.y + 1 }}>
+                                    {pref.name}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             );
         }
 
+        // メインアプリ
         function App() {
             const [activeTab, setActiveTab] = useState('list');
             const [visits, setVisits] = useState([]);
+            const [loading, setLoading] = useState(true);
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [formData, setFormData] = useState({ name: '', date: new Date().toISOString().split('T')[0], location: '', rating: 3, notes: '' });
+            const [formData, setFormData] = useState({ name: '', date: new Date().toISOString().split('T')[0], location: '', notes: '' });
 
             useEffect(() => {
                 auth.onAuthStateChanged((user) => { if (!user) auth.signInAnonymously(); });
                 const unsubscribe = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('temple_visits')
-                    .onSnapshot(s => setVisits(s.docs.map(d => ({...d.data(), id: d.id}))));
+                    .onSnapshot(s => {
+                        setVisits(s.docs.map(d => ({...d.data(), id: d.id})));
+                        setLoading(false);
+                    });
                 return () => unsubscribe();
             }, []);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('temple_visits').add(formData);
+                setFormData({ name: '', date: new Date().toISOString().split('T')[0], location: '', notes: '' });
                 setIsModalOpen(false);
             };
 
+            if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-[#2c4c3b]" /></div>;
+
             return (
-                <div className="min-h-screen">
+                <div className="min-h-screen pb-20">
                     <header className="bg-[#2c4c3b] text-white p-6 shadow-md flex justify-between items-center">
                         <h1 className="text-2xl font-bold flex items-center gap-2"><BookOpen /> 寺社巡礼録</h1>
                     </header>
-                    <main className="max-w-4xl mx-auto p-6">
-                        <div className="flex gap-4 mb-6">
-                            <button onClick={() => setActiveTab('list')} className={`px-4 py-2 font-bold ${activeTab === 'list' ? 'border-b-2 border-[#2c4c3b]' : ''}`}>リスト</button>
-                            <button onClick={() => setActiveTab('map')} className={`px-4 py-2 font-bold ${activeTab === 'map' ? 'border-b-2 border-[#2c4c3b]' : ''}`}>日本地図</button>
+                    <main className="max-w-4xl mx-auto p-4 sm:p-6">
+                        <div className="flex gap-6 border-b mb-6">
+                            <button onClick={() => setActiveTab('list')} className={`pb-2 font-bold ${activeTab === 'list' ? 'border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>リスト</button>
+                            <button onClick={() => setActiveTab('map')} className={`pb-2 font-bold ${activeTab === 'map' ? 'border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>日本地図</button>
                         </div>
+
                         {activeTab === 'list' ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {visits.map(v => (
-                                    <div key={v.id} className="bg-white p-4 rounded-lg shadow border border-stone-200">
-                                        <h2 className="font-bold text-[#2c4c3b] text-xl">{v.name}</h2>
-                                        <p className="text-sm text-stone-500">{v.location} / {v.date}</p>
-                                        <p className="mt-2 text-sm">{v.notes}</p>
+                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
+                                        <h2 className="font-bold text-[#2c4c3b] text-lg">{v.name}</h2>
+                                        <p className="text-xs text-stone-400">{v.location} | {v.date}</p>
+                                        <p className="mt-2 text-sm text-stone-700">{v.notes}</p>
                                     </div>
                                 ))}
+                                {visits.length === 0 && <p className="text-stone-400 col-span-2 text-center py-10">まだ記録がありません。右下の「＋」から追加してください。</p>}
                             </div>
                         ) : <JapanMap visits={visits} />}
                     </main>
-                    <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white p-4 rounded-full shadow-lg text-2xl">+</button>
+
+                    <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white w-14 h-14 rounded-full shadow-lg text-3xl flex items-center justify-center">+</button>
+
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                            <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl w-full max-w-md space-y-4">
-                                <h2 className="text-xl font-bold">参拝記録</h2>
-                                <input placeholder="寺社名" className="w-full border p-2 rounded" onChange={e=>setFormData({...formData, name: e.target.value})} required />
-                                <input placeholder="場所" className="w-full border p-2 rounded" onChange={e=>setFormData({...formData, location: e.target.value})} />
-                                <input type="date" className="w-full border p-2 rounded" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} />
-                                <textarea placeholder="感想" className="w-full border p-2 rounded" onChange={e=>setFormData({...formData, notes: e.target.value})} />
-                                <div className="flex gap-2">
-                                    <button type="button" onClick={()=>setIsModalOpen(false)} className="flex-1 bg-stone-200 p-2 rounded">キャンセル</button>
-                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-2 rounded">保存</button>
+                            <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl w-full max-w-md space-y-4">
+                                <h2 className="text-xl font-bold text-[#2c4c3b]">新しい参拝記録</h2>
+                                <input placeholder="寺社名（例：清水寺）" className="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#2c4c3b]" onChange={e=>setFormData({...formData, name: e.target.value})} required />
+                                <input placeholder="場所（例：京都府）" className="w-full border p-3 rounded-lg" onChange={e=>setFormData({...formData, location: e.target.value})} />
+                                <input type="date" className="w-full border p-3 rounded-lg" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} />
+                                <textarea placeholder="感想や御朱印のメモ" className="w-full border p-3 rounded-lg h-32" onChange={e=>setFormData({...formData, notes: e.target.value})} />
+                                <div className="flex gap-3">
+                                    <button type="button" onClick={()=>setIsModalOpen(false)} className="flex-1 bg-stone-100 p-3 rounded-lg font-bold">キャンセル</button>
+                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-3 rounded-lg font-bold shadow-md">保存する</button>
                                 </div>
                             </form>
                         </div>
@@ -122,6 +156,7 @@
                 </div>
             );
         }
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
