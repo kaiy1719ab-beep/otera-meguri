@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - セキュリティ対策版</title>
+    <title>寺社巡礼録 - AI完全版</title>
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -25,16 +25,18 @@
         const { useState, useEffect, useMemo } = React;
 
         function App() {
-            const [apiKey, setApiKey] = useState(localStorage.getItem('my_gemini_key') || '');
+            // キーをブラウザに保存する仕組み
+            const [apiKey, setApiKey] = useState(localStorage.getItem('user_api_key') || '');
             const [visits, setVisits] = useState([]);
+            const [tab, setTab] = useState('list');
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
-            const [formData, setFormData] = useState({ name: '', location: '', address: '', notes: '' });
+            const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
 
             const firebaseConfig = {
                 apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
                 authDomain: "otera-meguri.firebaseapp.com",
-                projectId: "plasma-galaxy-495010-v0",
+                projectId: "otera-meguri",
                 storageBucket: "otera-meguri.firebasestorage.app",
                 appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
             };
@@ -55,10 +57,11 @@
             }, [visits]);
 
             const fetchTempleInfo = async () => {
-                if (!formData.name || !apiKey) { alert("お寺の名前とAPIキーを入力してください"); return; }
+                if (!formData.name) return;
+                if (!apiKey) { alert("画面上の設定欄にAPIキーを入力してください"); return; }
                 setIsSearching(true);
                 try {
-                    const prompt = `日本の「${formData.name}」について調べて、住所（都道府県から）、都道府県名、由緒を、住所：、県名：、紹介：という目印を付けて答えて。`;
+                    const prompt = `「${formData.name}」という寺社の情報を以下の形式で。住所：[住所]、県名：[都道府県]、紹介：[解説]`;
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -66,59 +69,89 @@
                     });
                     const data = await res.json();
                     const text = data.candidates[0].content.parts[0].text;
-                    const address = text.split('住所：')[1]?.split('\n')[0] || "";
-                    const pref = text.split('県名：')[1]?.split('\n')[0] || "";
-                    setFormData(prev => ({ ...prev, address: address.trim(), location: pref.trim(), notes: `【AI情報】\n${text}` }));
-                } catch (e) { alert("AI検索に失敗しました。キーが有効か確認してください。"); }
-                setIsSearching(false);
+                    const address = text.match(/住所：(.*)/)?.[1] || "";
+                    const pref = text.match(/県名：(.*)/)?.[1] || "";
+                    const info = text.match(/紹介：(.*)/)?.[1] || "";
+
+                    setFormData(prev => ({
+                        ...prev,
+                        address: address.trim(),
+                        location: pref.trim().replace("県", "").replace("府", "").replace("都", "").replace("道", ""), // 地図データと合わせる
+                        notes: `【AI情報】\n${info}\n\n${prev.notes}`
+                    }));
+                } catch (e) {
+                    alert("接続エラー。キーが有効か確認してください。");
+                } finally {
+                    setIsSearching(true);
+                    setIsSearching(false);
+                }
             };
 
             return (
-                <div className="max-w-md mx-auto min-h-screen p-4">
-                    <header className="bg-[#2c4c3b] text-white p-6 rounded-xl mb-4 shadow-lg">
-                        <h1 className="text-xl font-bold">⛩️ 寺社巡礼録 - AI版</h1>
-                        <div className="mt-4">
-                            <label className="text-[10px] text-stone-300 block mb-1">Gemini APIキーを入力（一度入れれば保存されます）</label>
+                <div className="max-w-md mx-auto min-h-screen pb-20">
+                    <header className="bg-[#2c4c3b] text-white p-6 shadow-md">
+                        <h1 className="text-xl font-bold mb-4">⛩️ 寺社巡礼録</h1>
+                        <div className="bg-white/10 p-3 rounded-lg border border-white/20">
+                            <label className="text-[10px] uppercase font-bold block mb-1">Gemini API Key (Settings)</label>
                             <input 
                                 type="password" 
-                                className="w-full bg-black/20 text-white text-xs p-2 rounded border border-white/20 outline-none"
+                                className="w-full bg-transparent border-b border-white/40 text-xs py-1 outline-none focus:border-white"
                                 value={apiKey}
                                 onChange={(e) => {
                                     setApiKey(e.target.value);
-                                    localStorage.setItem('my_gemini_key', e.target.value);
+                                    localStorage.setItem('user_api_key', e.target.value);
                                 }}
                                 placeholder="AIza..."
                             />
+                            <p className="text-[8px] mt-1 text-white/60">※キーはあなたのブラウザ内だけに保存されます</p>
                         </div>
                     </header>
 
-                    <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-                        <p className="text-center font-bold text-stone-600 mb-4">踏破数: {Object.keys(stats).length} / 47</p>
-                        <div className="map-grid">
-                            {Array.from({length: 47}).map((_, i) => (
-                                <div key={i} className="pref-tile bg-stone-100 text-stone-300">?</div>
-                            ))}
-                        </div>
+                    <div className="flex bg-white border-b">
+                        <button onClick={() => setTab('list')} className={`flex-1 p-3 text-sm font-bold ${tab === 'list' ? 'text-[#2c4c3b] border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>リスト</button>
+                        <button onClick={() => setTab('map')} className={`flex-1 p-3 text-sm font-bold ${tab === 'map' ? 'text-[#2c4c3b] border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>日本地図</button>
                     </div>
+
+                    <main className="p-4">
+                        {tab === 'list' ? (
+                            <div className="space-y-4">
+                                {visits.map(v => (
+                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
+                                        <div className="font-bold text-[#2c4c3b]">{v.name}</div>
+                                        <div className="text-[10px] text-stone-500">{v.address || v.location}</div>
+                                        <div className="text-sm mt-2 text-stone-600">{v.notes}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-white p-4 rounded-xl shadow-sm">
+                                <div className="map-grid">
+                                    {PREFECTURE_MAP.map(p => (
+                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>{p.name}</div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </main>
 
                     <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white w-14 h-14 rounded-full shadow-lg text-3xl font-bold">+</button>
 
                     {isModalOpen && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
                             <div className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4">
-                                <h2 className="font-bold text-xl text-[#2c4c3b]">参拝記録の作成</h2>
+                                <h2 className="font-bold text-[#2c4c3b]">参拝記録を追加</h2>
                                 <div className="flex gap-2">
-                                    <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="お寺の名前" />
-                                    <button onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-3 rounded-xl text-xs font-bold">
-                                        {isSearching ? '⏳' : '✨AI検索'}
+                                    <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="寺社名（例：田無神社）" />
+                                    <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-3 rounded-xl text-xs font-bold">
+                                        {isSearching ? <span className="animate-spin">⏳</span> : '✨AI'}
                                     </button>
                                 </div>
                                 <div className="text-[10px] bg-stone-50 p-3 rounded-xl border border-dashed">
-                                    <p>📍住所: {formData.address || '自動入力待ち'}</p>
-                                    <p>🏛️県名: {formData.location || '自動入力待ち'}</p>
+                                    <p>📍 住所: {formData.address || '(AI検索待ち)'}</p>
+                                    <p>🏛️ 県名: {formData.location || '(AI検索待ち)'}</p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-3 rounded-xl font-bold">戻る</button>
+                                    <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-3 rounded-xl">戻る</button>
                                     <button className="flex-1 bg-[#2c4c3b] text-white p-3 rounded-xl font-bold">保存</button>
                                 </div>
                             </div>
@@ -127,6 +160,21 @@
                 </div>
             );
         }
+
+        const PREFECTURE_MAP = [
+            { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
+            { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
+            { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 },
+            { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 },
+            { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 },
+            { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 },
+            { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 },
+            { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈', x: 12, y: 8 },
+            { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌', x: 6,  y: 9 },
+            { id: '鹿児島県', name: '鹿児', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 },
+            { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }
+        ];
+
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
