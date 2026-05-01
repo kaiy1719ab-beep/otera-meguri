@@ -16,7 +16,7 @@
         .map-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; max-width: 600px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; }
         .pref-tile { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 8px; border-radius: 2px; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
+        .animate-spin { animation: spin 1s linear infinite; display: inline-block; }
     </style>
 </head>
 <body>
@@ -24,6 +24,9 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+
+        // ★★★ ここにGoogle AI Studioで取得したAPIキーを入力してください ★★★
+        const GEMINI_API_KEY = ""; 
 
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
@@ -45,7 +48,7 @@
             const [tab, setTab] = useState('list');
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
-            const [formData, setFormData] = useState({ name: '', location: '', rating: 5, notes: '', image: null });
+            const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '', image: null });
             
             const firebaseConfig = {
                 apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
@@ -62,7 +65,7 @@
                 const unsubscribe = db.collection('visits').onSnapshot(snap => {
                     setVisits(snap.docs.map(doc => ({id: doc.id, ...doc.data()})));
                     setLoading(false);
-                }, () => setLoading(false));
+                });
                 return () => unsubscribe();
             }, []);
 
@@ -72,37 +75,48 @@
                 return s;
             }, [visits]);
 
-            // --- AIネット検索機能 ---
+            // --- Gemini API連携: お寺情報の自動取得 ---
             const fetchTempleInfo = async () => {
-                if (!formData.name) return;
+                if (!formData.name || !GEMINI_API_KEY) {
+                    alert("お寺の名前を入力し、APIキーを設定してください。");
+                    return;
+                }
                 setIsSearching(true);
-                // Gemini API等の代わりに、モック（模擬動作）を実装。
-                // 実際にはここにAPI呼び出しを書きます。
-                setTimeout(() => {
-                    const foundPref = PREFECTURE_MAP.find(p => formData.name.includes(p.id) || formData.name.includes(p.name))?.id || "";
+                try {
+                    const prompt = `「${formData.name}」という日本の寺社について、以下の情報をJSON形式で教えてください。
+                    { "address": "住所(都道府県から)", "pref": "都道府県名のみ", "info": "200文字程度の解説や見どころ" }
+                    余計な説明は省きJSONのみ出力して。`;
+                    
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+                    const data = await res.json();
+                    const text = data.candidates[0].content.parts[0].text;
+                    const json = JSON.parse(text.replace(/```json|```/g, ""));
+                    
                     setFormData(prev => ({
                         ...prev,
-                        location: foundPref,
-                        notes: prev.notes + `\n(AI検索: ${prev.name}は素晴らしい由緒あるお寺です。)`
+                        address: json.address,
+                        location: json.pref,
+                        notes: `【AI解説】\n${json.info}\n\n${prev.notes}`
                     }));
+                } catch (e) {
+                    alert("情報が見つかりませんでした。");
+                } finally {
                     setIsSearching(false);
-                }, 1500);
-            };
-
-            const handleImage = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => setFormData({ ...formData, image: reader.result });
-                    reader.readAsDataURL(file);
                 }
             };
 
             const handleSave = async (e) => {
                 e.preventDefault();
-                await firebase.firestore().collection('visits').add({ ...formData, date: new Date().toISOString().split('T')[0] });
+                await firebase.firestore().collection('visits').add({ 
+                    ...formData, 
+                    date: new Date().toISOString().split('T')[0] 
+                });
                 setIsModalOpen(false);
-                setFormData({ name: '', location: '', rating: 5, notes: '', image: null });
+                setFormData({ name: '', location: '', address: '', rating: 5, notes: '', image: null });
             };
 
             if (loading) return <div className="p-20 text-center font-bold">読み込み中...</div>;
@@ -121,13 +135,12 @@
                             <div className="space-y-4">
                                 {visits.map(v => (
                                     <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
-                                        {v.image && <img src={v.image} className="w-full h-40 object-cover rounded-lg mb-3" />}
                                         <div className="flex justify-between">
                                             <span className="font-bold text-[#2c4c3b]">{v.name}</span>
                                             <span className="text-amber-400">{'★'.repeat(v.rating)}</span>
                                         </div>
-                                        <div className="text-xs text-stone-400">{v.location} | {v.date}</div>
-                                        <p className="text-sm mt-2 text-stone-600">{v.notes}</p>
+                                        <div className="text-[10px] text-stone-500 mt-1">{v.address || v.location}</div>
+                                        <p className="text-sm mt-2 text-stone-600 whitespace-pre-wrap">{v.notes}</p>
                                     </div>
                                 ))}
                             </div>
@@ -150,22 +163,27 @@
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
                             <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4 my-8">
-                                <h2 className="font-bold text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
+                                <h2 className="font-bold text-[#2c4c3b]">参拝記録を追加</h2>
                                 
                                 <div>
                                     <label className="text-xs font-bold text-stone-500">寺社名</label>
                                     <div className="flex gap-2">
                                         <input className="flex-1 border p-2 rounded-lg text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 清水寺" />
-                                        <button type="button" onClick={fetchTempleInfo} className="bg-stone-100 px-3 rounded-lg text-xs font-bold text-[#2c4c3b] border border-stone-200">
-                                            {isSearching ? <span className="inline-block animate-spin">⏳</span> : '🔍 検索'}
+                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] px-3 rounded-lg text-xs font-bold text-white">
+                                            {isSearching ? <span className="animate-spin">⏳</span> : '✨ AI検索'}
                                         </button>
                                     </div>
                                 </div>
 
+                                <div>
+                                    <label className="text-xs font-bold text-stone-500">住所</label>
+                                    <input className="w-full border p-2 rounded-lg text-xs" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="AI検索で自動入力されます" />
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label className="text-xs font-bold text-stone-500">場所</label>
-                                        <select className="w-full border p-2 rounded-lg text-sm" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required>
+                                        <label className="text-xs font-bold text-stone-500">都道府県</label>
+                                        <select className="w-full border p-2 rounded-lg text-xs" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required>
                                             <option value="">選択</option>
                                             {PREFECTURE_MAP.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}
                                         </select>
@@ -173,19 +191,14 @@
                                     <div>
                                         <label className="text-xs font-bold text-stone-500">評価</label>
                                         <div className="flex text-amber-400 mt-1">
-                                            {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
+                                            {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer text-lg">{n <= formData.rating ? '★' : '☆'}</span>)}
                                         </div>
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500">写真</label>
-                                    <input type="file" accept="image/*" onChange={handleImage} className="w-full text-xs mt-1" />
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-stone-500">感想・メモ</label>
-                                    <textarea className="w-full border p-2 rounded-lg h-20 text-sm" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="御朱印の情報など..." />
+                                    <label className="text-xs font-bold text-stone-500">感想・AI解説</label>
+                                    <textarea className="w-full border p-2 rounded-lg h-24 text-xs" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="AIが自動で情報を取得します..." />
                                 </div>
 
                                 <div className="flex gap-2 pt-2">
