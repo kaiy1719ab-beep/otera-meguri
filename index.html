@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - 真・完成版</title>
+    <title>寺社巡礼録 - AI完全版</title>
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -25,8 +25,8 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // ★ あなたの「本物の」APIキーをセットしました！ ★
-        const GEMINI_API_KEY = "AIzaSyAD2GUk4pU1LKvMTcHEFFKMOv4-GPYE_Bg"; 
+        // ★★★ ここに Gemini Project の新しいキー (...E5Ik) を貼ってください ★★★
+        const GEMINI_API_KEY = "ここに新しいキーを貼る"; 
 
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
@@ -51,7 +51,6 @@
             const [searchError, setSearchError] = useState("");
             const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
 
-            // ★ データベース用の正しい設定 ★
             const firebaseConfig = {
                 apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
                 authDomain: "otera-meguri.firebaseapp.com",
@@ -81,7 +80,6 @@
                 return s;
             }, [visits]);
 
-            // --- 正しいAPIキーでAIにリクエストを送る ---
             const fetchTempleInfo = async () => {
                 if (!formData.name) return;
                 setIsSearching(true);
@@ -89,7 +87,6 @@
                 
                 try {
                     const prompt = `日本の寺社「${formData.name}」について調べてください。`;
-                    
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -110,19 +107,11 @@
                         })
                     });
                     
-                    if (!res.ok) {
-                        const errorData = await res.json().catch(() => ({}));
-                        throw new Error(errorData.error?.message || `通信失敗`);
-                    }
-
                     const data = await res.json();
                     if (data.error) throw new Error(data.error.message);
-                    
                     const text = data.candidates[0].content.parts[0].text;
                     const json = JSON.parse(text);
-
-                    const aiPref = json.pref || "";
-                    const matchedPref = PREFECTURE_MAP.find(p => aiPref.includes(p.name))?.id || "";
+                    const matchedPref = PREFECTURE_MAP.find(p => json.pref.includes(p.name))?.id || "";
 
                     setFormData(prev => ({
                         ...prev,
@@ -145,7 +134,7 @@
                 setSearchError("");
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center font-bold text-[#2c4c3b]">アプリを起動中...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center font-bold">アプリを起動中...</div>;
 
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-20 relative text-stone-800">
@@ -169,11 +158,9 @@
                                         <p className="text-sm mt-3 text-stone-700 whitespace-pre-wrap leading-relaxed">{v.notes}</p>
                                     </div>
                                 ))}
-                                {visits.length === 0 && <p className="text-center text-stone-400 pt-20">記録がまだありません</p>}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
-                                <p className="text-center mb-6 font-bold text-stone-600">全国踏破数: {Object.keys(stats).length} / 47</p>
                                 <div className="map-grid">
                                     {PREFECTURE_MAP.map(p => (
                                         <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold shadow-md' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
@@ -192,28 +179,23 @@
                             <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl my-8">
                                 <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500 uppercase">お寺の名前</label>
                                     <div className="flex gap-2 mt-1">
-                                        <input className="flex-1 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
-                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold active:scale-95 transition">
+                                        <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
+                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold shadow-sm">
                                             {isSearching ? <span className="animate-spin text-lg">⏳</span> : '✨AI検索'}
                                         </button>
                                     </div>
-                                    {searchError && <div className="bg-red-100 text-red-600 border border-red-300 p-2 rounded-lg mt-2 text-xs font-bold break-all">{searchError}</div>}
+                                    {searchError && <div className="bg-red-100 text-red-600 p-2 rounded-lg mt-2 text-[10px] font-bold break-all">{searchError}</div>}
                                 </div>
-                                <div className="text-[10px] bg-stone-50 p-3 rounded-xl border border-dashed text-stone-600 leading-tight">
-                                    <p className="font-bold mb-1 text-[#2c4c3b]">AI自動補完:</p>
+                                <div className="text-[10px] bg-stone-50 p-3 rounded-xl border border-dashed text-stone-600">
                                     <p>📍 住所: {formData.address || '（未取得）'}</p>
                                     <p>🏛️ 県名: {formData.location || '（未選択）'}</p>
                                 </div>
-                                <div>
-                                    <label className="text-xs font-bold text-stone-500">評価</label>
-                                    <div className="flex text-amber-400 text-xl mt-1">
-                                        {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
-                                    </div>
+                                <div className="flex text-amber-400 text-xl">
+                                    {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
                                 </div>
-                                <textarea className="w-full border p-3 rounded-xl h-24 text-xs mt-2" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="感想など..." />
-                                <div className="flex gap-2 pt-2">
+                                <textarea className="w-full border p-3 rounded-xl h-24 text-xs" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="感想など..." />
+                                <div className="flex gap-2">
                                     <button type="button" onClick={() => { setIsModalOpen(false); setSearchError(""); }} className="flex-1 bg-stone-100 p-4 rounded-2xl font-bold">戻る</button>
                                     <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">保存</button>
                                 </div>
