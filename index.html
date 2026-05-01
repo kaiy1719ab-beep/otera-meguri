@@ -25,7 +25,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // あなたの最新のAPIキー（My First Project）を組み込みました
+        // あなたの最新のAPIキーを適用済み
         const GEMINI_API_KEY = "AIzaSyATCHqm807E94i489JQz0qOMwxrnIp1oZU"; 
 
         const PREFECTURE_MAP = [
@@ -75,14 +75,15 @@
                 return s;
             }, [visits]);
 
+            // --- 最強のAI検索ロジック ---
             const fetchTempleInfo = async () => {
                 if (!formData.name) return;
                 setIsSearching(true);
                 try {
-                    const prompt = `日本の寺社「${formData.name}」の情報を以下の形式だけで答えてください。
-                    住所: [住所]
-                    県名: [都道府県名のみ]
-                    紹介: [100文字程度の解説]`;
+                    const prompt = `日本の「${formData.name}」という寺社について以下の情報を抜き出し、必ずこの形式だけで返して。
+                    ADDRESS: 住所（都道府県から）
+                    PREF: 都道府県名（例：東京都）
+                    INFO: 由緒と見どころ（100文字程度）`;
 
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                         method: 'POST',
@@ -93,19 +94,15 @@
                     const data = await res.json();
                     const text = data.candidates[0].content.parts[0].text;
                     
-                    const lines = text.split('\n');
-                    let address = "", pref = "", info = "";
-                    
-                    lines.forEach(line => {
-                        if (line.includes("住所:")) address = line.split("住所:")[1].replace(/[\[\]]/g, "").trim();
-                        if (line.includes("県名:")) pref = line.split("県名:")[1].replace(/[\[\]]/g, "").trim();
-                        if (line.includes("紹介:")) info = line.split("紹介:")[1].replace(/[\[\]]/g, "").trim();
-                    });
+                    // 文字の中から「目印」を頼りに情報を抜き出す
+                    const address = text.match(/ADDRESS:\s*(.*)/)?.[1]?.trim() || "";
+                    const pref = text.match(/PREF:\s*(.*)/)?.[1]?.trim() || "";
+                    const info = text.match(/INFO:\s*([\s\S]*)/)?.[1]?.trim() || "";
 
                     setFormData(prev => ({
                         ...prev,
-                        address: address || prev.address,
-                        location: pref || prev.location,
+                        address: address,
+                        location: pref, // 都道府県を自動セット
                         notes: info ? `【AI解説】\n${info}\n\n${prev.notes}` : prev.notes
                     }));
                 } catch (e) {
@@ -122,7 +119,7 @@
                 setFormData({ name: '', location: '', address: '', rating: 5, notes: '' });
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center font-bold text-[#2c4c3b]">読み込み中...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center font-bold">読み込み中...</div>;
 
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-20 relative text-stone-800">
@@ -146,6 +143,7 @@
                                         <p className="text-sm mt-3 text-stone-700 whitespace-pre-wrap leading-relaxed">{v.notes}</p>
                                     </div>
                                 ))}
+                                {visits.length === 0 && <p className="text-center text-stone-400 pt-20">記録がまだありません</p>}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
@@ -165,13 +163,13 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl my-8">
-                                <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-4">参拝記録を追加</h2>
+                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
+                                <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
                                 
                                 <div>
                                     <label className="text-xs font-bold text-stone-500 uppercase">お寺の名前</label>
                                     <div className="flex gap-2 mt-1">
-                                        <input className="flex-1 border p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#2c4c3b] outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
+                                        <input className="flex-1 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
                                         <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold active:scale-95 transition">
                                             {isSearching ? <span className="animate-spin text-lg">⏳</span> : '✨AI検索'}
                                         </button>
@@ -179,14 +177,13 @@
                                 </div>
 
                                 <div className="text-[10px] bg-stone-50 p-3 rounded-xl border border-dashed text-stone-600">
-                                    <p className="font-bold mb-1">AIが取得した情報:</p>
+                                    <p className="font-bold mb-1">AI自動取得情報:</p>
                                     <p>📍 住所: {formData.address || '（未取得）'}</p>
-                                    <p className="mt-1 font-bold">自動セットされた都道府県:</p>
-                                    <p>{formData.location || '（未選択）'}</p>
+                                    <p>都道府: {formData.location || '（未選択）'}</p>
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500">評価</label>
+                                    <label className="text-xs font-bold text-stone-500 uppercase">評価</label>
                                     <div className="flex text-amber-400 text-xl mt-1">
                                         {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
                                     </div>
@@ -196,7 +193,7 @@
 
                                 <div className="flex gap-2 pt-2">
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-4 rounded-2xl font-bold">戻る</button>
-                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">記録を保存</button>
+                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">保存</button>
                                 </div>
                             </form>
                         </div>
