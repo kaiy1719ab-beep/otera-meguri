@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - AI完全統合版</title>
+    <title>寺社巡礼録 - AI完全版</title>
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -25,7 +25,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // あなたの最新のAPIキーを適用しました
+        // ★★★ あなたの最新APIキー（My First Project）を直接埋め込みました ★★★
         const GEMINI_API_KEY = "AIzaSyATCHqm807E94i489JQz0qOMwxrnIp1oZU"; 
 
         const PREFECTURE_MAP = [
@@ -50,11 +50,11 @@
             const [isSearching, setIsSearching] = useState(false);
             const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
 
-            // Firebaseの最新設定を反映
+            // ★★★ ここもあなたのFirebase最新情報に更新しました ★★★
             const firebaseConfig = {
-                apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
+                apiKey: "AIzaSyATCHqm807E94i489JQz0qOMwxrnIp1oZU",
                 authDomain: "otera-meguri.firebaseapp.com",
-                projectId: "otera-meguri",
+                projectId: "plasma-galaxy-495010-v0",
                 storageBucket: "otera-meguri.firebasestorage.app",
                 appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
             };
@@ -76,17 +76,15 @@
                 return s;
             }, [visits]);
 
-            // --- 強化版AI検索ロジック ---
+            // --- AI検索: 住所・都道府県を確実に抜き出すロジック ---
             const fetchTempleInfo = async () => {
                 if (!formData.name) return;
                 setIsSearching(true);
                 try {
-                    const prompt = `日本の「${formData.name}」という寺院や神社について、以下の3点だけを教えてください。
-                    住所：[都道府県からの住所]
-                    県名：[その寺社がある都道府県名だけ（例：東京都）]
-                    内容：[その寺社の由緒や見どころを100文字程度で]
-                    
-                    必ずこの形式で、余計な挨拶は一切含めないでください。`;
+                    const prompt = `日本の寺社「${formData.name}」の情報を以下の形式だけで答えてください。
+                    住所：[住所]
+                    県名：[都道府県名のみ]
+                    紹介：[100文字程度の解説]`;
 
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                         method: 'POST',
@@ -95,24 +93,24 @@
                     });
                     
                     const data = await res.json();
-                    
-                    if (data.error) throw new Error(data.error.message);
-
                     const text = data.candidates[0].content.parts[0].text;
                     
-                    const address = text.split('住所：')[1]?.split('\n')[0]?.trim() || "";
-                    const pref = text.split('県名：')[1]?.split('\n')[0]?.trim() || "";
-                    const info = text.split('内容：')[1]?.trim() || "";
+                    const lines = text.split('\n');
+                    let address = "", pref = "", info = "";
+                    lines.forEach(line => {
+                        if (line.includes("住所：")) address = line.split("住所：")[1].trim().replace(/[\[\]]/g, "");
+                        if (line.includes("県名：")) pref = line.split("県名：")[1].trim().replace(/[\[\]]/g, "");
+                        if (line.includes("紹介：")) info = line.split("紹介：")[1].trim().replace(/[\[\]]/g, "");
+                    });
 
                     setFormData(prev => ({
                         ...prev,
-                        address: address,
-                        location: pref,
+                        address: address || prev.address,
+                        location: pref || prev.location,
                         notes: info ? `【AI解説】\n${info}\n\n${prev.notes}` : prev.notes
                     }));
                 } catch (e) {
-                    console.error("AI検索エラー:", e);
-                    alert("AI検索に失敗しました。名前を詳しく入れるか、もう一度お試しください。");
+                    alert("AI検索に失敗しました。お寺の名前を「田無神社」のように詳しく入れてもう一度お試しください。");
                 } finally {
                     setIsSearching(false);
                 }
@@ -125,7 +123,7 @@
                 setFormData({ name: '', location: '', address: '', rating: 5, notes: '' });
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center font-bold">読み込み中...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center font-bold">アプリを起動中...</div>;
 
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-20 relative text-stone-800">
@@ -172,7 +170,7 @@
                                 <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
                                 
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500">お寺・神社の名前</label>
+                                    <label className="text-xs font-bold text-stone-500">お寺の名前</label>
                                     <div className="flex gap-2 mt-1">
                                         <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
                                         <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold active:scale-95 transition">
@@ -191,7 +189,7 @@
 
                                 <div className="flex gap-2 pt-2">
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-4 rounded-2xl font-bold">戻る</button>
-                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">記録を保存</button>
+                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">保存</button>
                                 </div>
                             </form>
                         </div>
