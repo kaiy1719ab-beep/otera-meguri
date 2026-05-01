@@ -25,8 +25,8 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // ★ 無料枠が使える「Gemini Project」のAPIキー ★
-        const GEMINI_API_KEY = "AIzaSyA9DaPy04aRV7YibBvD08raj4ZOsueE5Ik"; 
+        // ★ あなたの「本物の」APIキーをセットしました！ ★
+        const GEMINI_API_KEY = "AIzaSyAD2GUk4pU1LKvMTcHEFFKMOv4-GPYE_Bg"; 
 
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
@@ -51,6 +51,7 @@
             const [searchError, setSearchError] = useState("");
             const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
 
+            // ★ データベース用の正しい設定 ★
             const firebaseConfig = {
                 apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
                 authDomain: "otera-meguri.firebaseapp.com",
@@ -80,7 +81,7 @@
                 return s;
             }, [visits]);
 
-            // --- AIのバージョンを最新の「gemini-2.0-flash」に修正！ ---
+            // --- 正しいAPIキーでAIにリクエストを送る ---
             const fetchTempleInfo = async () => {
                 if (!formData.name) return;
                 setIsSearching(true);
@@ -89,7 +90,6 @@
                 try {
                     const prompt = `日本の寺社「${formData.name}」について調べてください。`;
                     
-                    // ★ ここを gemini-2.0-flash に修正しました ★
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
