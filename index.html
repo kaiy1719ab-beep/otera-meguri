@@ -25,8 +25,8 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // 設定済みのAPIキー
-        const GEMINI_API_KEY = "AIzaSyAD2GUk4pU1LKvMTcHEFFKMOv4-GPYE_Bg"; 
+        // 設定済みの新しいAPIキー
+        const GEMINI_API_KEY = "AIzaSyA9DaPy04aRV7YibBvD08raj4ZOsueE5Ik"; 
 
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
@@ -175,7 +175,7 @@
                                     <label className="text-xs font-bold text-stone-500">お寺の名前</label>
                                     <div className="flex gap-2 mt-1">
                                         <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
-                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-3 rounded-xl text-xs font-bold active:scale-95 transition">
+                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold active:scale-95 transition">
                                             {isSearching ? <span className="animate-spin text-lg">⏳</span> : '✨AI検索'}
                                         </button>
                                     </div>
