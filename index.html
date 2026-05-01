@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - AI完全版</title>
+    <title>寺社巡礼録 - 安定版</title>
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -25,18 +25,19 @@
         const { useState, useEffect, useMemo } = React;
 
         function App() {
-            // キーをブラウザに保存する仕組み
-            const [apiKey, setApiKey] = useState(localStorage.getItem('user_api_key') || '');
+            // キーをブラウザのメモリに保存する仕組み（GitHubに公開されません）
+            const [apiKey, setApiKey] = useState(localStorage.getItem('my_temple_app_key') || '');
             const [visits, setVisits] = useState([]);
             const [tab, setTab] = useState('list');
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
-            const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
+            const [formData, setFormData] = useState({ name: '', location: '', address: '', notes: '' });
 
+            // Firebase設定
             const firebaseConfig = {
                 apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
                 authDomain: "otera-meguri.firebaseapp.com",
-                projectId: "otera-meguri",
+                projectId: "plasma-galaxy-495010-v0",
                 storageBucket: "otera-meguri.firebasestorage.app",
                 appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
             };
@@ -61,70 +62,82 @@
                 if (!apiKey) { alert("画面上の設定欄にAPIキーを入力してください"); return; }
                 setIsSearching(true);
                 try {
-                    const prompt = `「${formData.name}」という寺社の情報を以下の形式で。住所：[住所]、県名：[都道府県]、紹介：[解説]`;
+                    const prompt = `日本の「${formData.name}」について調べて、住所（都道府県から）、県名、由緒を以下の形式で答えて。
+                    住所：[住所]
+                    県名：[都道府県名のみ]
+                    内容：[解説]`;
+
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                     });
                     const data = await res.json();
+                    if (data.error) throw new Error(data.error.message);
+
                     const text = data.candidates[0].content.parts[0].text;
-                    const address = text.match(/住所：(.*)/)?.[1] || "";
-                    const pref = text.match(/県名：(.*)/)?.[1] || "";
-                    const info = text.match(/紹介：(.*)/)?.[1] || "";
+                    const address = text.split('住所：')[1]?.split('\n')[0] || "";
+                    const pref = text.split('県名：')[1]?.split('\n')[0] || "";
+                    const info = text.split('内容：')[1] || "";
 
                     setFormData(prev => ({
                         ...prev,
                         address: address.trim(),
-                        location: pref.trim().replace("県", "").replace("府", "").replace("都", "").replace("道", ""), // 地図データと合わせる
-                        notes: `【AI情報】\n${info}\n\n${prev.notes}`
+                        location: pref.trim().replace(/[都道府県]/, ""), // 地図と一致させる
+                        notes: `【AI解説】\n${info.trim()}\n\n${prev.notes}`
                     }));
                 } catch (e) {
-                    alert("接続エラー。キーが有効か確認してください。");
+                    alert("接続エラー。キーが有効か、制限されていないか確認してください。");
                 } finally {
-                    setIsSearching(true);
                     setIsSearching(false);
                 }
             };
 
+            const handleSave = async (e) => {
+                e.preventDefault();
+                await firebase.firestore().collection('visits').add({ ...formData, date: new Date().toISOString().split('T')[0] });
+                setIsModalOpen(false);
+                setFormData({ name: '', location: '', address: '', notes: '' });
+            };
+
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-20">
-                    <header className="bg-[#2c4c3b] text-white p-6 shadow-md">
+                    <header className="bg-[#2c4c3b] text-white p-6 shadow-lg mb-4">
                         <h1 className="text-xl font-bold mb-4">⛩️ 寺社巡礼録</h1>
-                        <div className="bg-white/10 p-3 rounded-lg border border-white/20">
-                            <label className="text-[10px] uppercase font-bold block mb-1">Gemini API Key (Settings)</label>
+                        <div className="bg-black/20 p-3 rounded-lg">
+                            <label className="text-[10px] uppercase font-bold text-stone-300">Gemini API Key</label>
                             <input 
                                 type="password" 
-                                className="w-full bg-transparent border-b border-white/40 text-xs py-1 outline-none focus:border-white"
+                                className="w-full bg-transparent border-b border-white/40 text-xs py-1 outline-none"
                                 value={apiKey}
                                 onChange={(e) => {
                                     setApiKey(e.target.value);
-                                    localStorage.setItem('user_api_key', e.target.value);
+                                    localStorage.setItem('my_temple_app_key', e.target.value);
                                 }}
-                                placeholder="AIza..."
+                                placeholder="AIza...をここに貼り付け"
                             />
-                            <p className="text-[8px] mt-1 text-white/60">※キーはあなたのブラウザ内だけに保存されます</p>
                         </div>
                     </header>
 
-                    <div className="flex bg-white border-b">
+                    <div className="flex bg-white mb-4 border-b">
                         <button onClick={() => setTab('list')} className={`flex-1 p-3 text-sm font-bold ${tab === 'list' ? 'text-[#2c4c3b] border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>リスト</button>
-                        <button onClick={() => setTab('map')} className={`flex-1 p-3 text-sm font-bold ${tab === 'map' ? 'text-[#2c4c3b] border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>日本地図</button>
+                        <button onClick={() => setTab('map')} className={`flex-1 p-3 text-sm font-bold ${tab === 'map' ? 'text-[#2c4c3b] border-b-2 border-[#2c4c3b]' : 'text-stone-400'}`}>地図</button>
                     </div>
 
                     <main className="p-4">
                         {tab === 'list' ? (
                             <div className="space-y-4">
                                 {visits.map(v => (
-                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
+                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border">
                                         <div className="font-bold text-[#2c4c3b]">{v.name}</div>
-                                        <div className="text-[10px] text-stone-500">{v.address || v.location}</div>
-                                        <div className="text-sm mt-2 text-stone-600">{v.notes}</div>
+                                        <div className="text-[10px] text-stone-400">{v.address || v.location}</div>
+                                        <p className="text-sm mt-2 text-stone-600">{v.notes}</p>
                                     </div>
                                 ))}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
+                                <p className="text-center mb-4 text-xs font-bold text-stone-500">踏破数: {Object.keys(stats).length} / 47</p>
                                 <div className="map-grid">
                                     {PREFECTURE_MAP.map(p => (
                                         <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>{p.name}</div>
@@ -138,7 +151,7 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4">
+                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4">
                                 <h2 className="font-bold text-[#2c4c3b]">参拝記録を追加</h2>
                                 <div className="flex gap-2">
                                     <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="寺社名（例：田無神社）" />
@@ -151,10 +164,10 @@
                                     <p>🏛️ 県名: {formData.location || '(AI検索待ち)'}</p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-3 rounded-xl">戻る</button>
-                                    <button className="flex-1 bg-[#2c4c3b] text-white p-3 rounded-xl font-bold">保存</button>
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-3 rounded-xl">戻る</button>
+                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-3 rounded-xl font-bold">保存</button>
                                 </div>
-                            </div>
+                            </form>
                         </div>
                     )}
                 </div>
