@@ -13,8 +13,25 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <style>
         body { background-color: #f4f1eb; }
-        .map-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; max-width: 600px; margin: 0 auto; }
-        .pref-tile { aspect-ratio: 1; display: flex; items-center; justify-center; font-size: 8px; border-radius: 2px; }
+        .map-grid { 
+            display: grid; 
+            grid-template-columns: repeat(16, 1fr); 
+            gap: 2px; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+        }
+        .pref-tile { 
+            aspect-ratio: 1; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 8px; 
+            border-radius: 2px;
+            cursor: default;
+        }
     </style>
 </head>
 <body>
@@ -23,13 +40,19 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // 都道府県の位置データ
+        // --- 47都道府県 完全版データ ---
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
-            { id: '東京都', name: '東京', x: 12, y: 7 }, { id: '大阪府', name: '大阪', x: 6, y: 8 },
-            { id: '京都府', name: '京都', x: 7, y: 7 }, { id: '神奈川県', name: '神奈', x: 12, y: 8 },
-            { id: '福岡県', name: '福岡', x: 2, y: 8 }, { id: '沖縄県', name: '沖縄', x: 0, y: 11 }
-            // ※簡易版として主要都市のみ。動作確認後、全県追加可能です。
+            { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
+            { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 },
+            { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 },
+            { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 },
+            { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 },
+            { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 },
+            { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈', x: 12, y: 8 },
+            { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌', x: 6,  y: 9 },
+            { id: '鹿児島県', name: '鹿児', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 },
+            { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }
         ];
 
         function App() {
@@ -96,13 +119,14 @@
                                         <div className="text-sm mt-2 text-stone-600">{v.notes}</div>
                                     </div>
                                 ))}
+                                {visits.length === 0 && <p className="text-center text-stone-400 pt-10">まだ記録がありません</p>}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
-                                <p className="text-center mb-4 font-bold text-stone-600">参拝済み都道府県</p>
+                                <p className="text-center mb-4 font-bold text-stone-600">全国制覇状況: {Object.keys(stats).length} / 47</p>
                                 <div className="map-grid">
                                     {PREFECTURE_MAP.map(p => (
-                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
+                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
                                             {p.name}
                                         </div>
                                     ))}
@@ -115,19 +139,17 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                            <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
+                            <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4 overflow-y-auto max-h-[90vh]">
                                 <h2 className="font-bold text-[#2c4c3b]">参拝記録を追加</h2>
                                 <input placeholder="寺社名" className="w-full border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                                <select className="w-full border p-2 rounded" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})}>
+                                <select className="w-full border p-2 rounded" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required>
                                     <option value="">都道府県を選択</option>
-                                    <option value="東京都">東京都</option>
-                                    <option value="京都府">京都府</option>
-                                    <option value="大阪府">大阪府</option>
+                                    {PREFECTURE_MAP.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}
                                 </select>
                                 <div className="flex items-center gap-2">
                                     <span>評価:</span>
                                     {[1,2,3,4,5].map(n => (
-                                        <button key={n} type="button" onClick={() => setFormData({...formData, rating: n})} className={n <= formData.rating ? 'text-amber-400' : 'text-stone-300'}>★</button>
+                                        <button key={n} type="button" onClick={() => setFormData({...formData, rating: n})} className={n <= formData.rating ? 'text-amber-400 text-xl' : 'text-stone-300 text-xl'}>★</button>
                                     ))}
                                 </div>
                                 <textarea placeholder="感想" className="w-full border p-2 rounded h-20" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
