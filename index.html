@@ -5,11 +5,12 @@ import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken }
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
 // ==========================================
-// ★ 設定エリア ★
+// ★ 環境設定エリア ★
+// GitHub等で管理する場合、本来は「.env」ファイルに隠すのがベストですが、
+// 今回は簡単に動かすためにここに直接記述しています。
 // ==========================================
 
-// Firebaseの設定（奥様と共有するためのデータ保管庫の鍵）
-const manualFirebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
   authDomain: "otera-meguri.firebaseapp.com",
   projectId: "otera-meguri",
@@ -20,24 +21,27 @@ const manualFirebaseConfig = {
 };
 
 // ==========================================
-// これより下はシステムと機能のコードです
+// システム初期化（外部環境・ローカル環境両対応）
 // ==========================================
 
-const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-const hasFirebaseConfig = firebaseConfigStr || (manualFirebaseConfig && manualFirebaseConfig.apiKey);
+// AI環境(Canvas)特有の変数を読み込みつつ、GitHub等のローカル環境では上の firebaseConfig を使用する仕組み
+const envFirebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+const activeFirebaseConfig = envFirebaseConfigStr ? JSON.parse(envFirebaseConfigStr) : firebaseConfig;
+const hasFirebaseConfig = activeFirebaseConfig && activeFirebaseConfig.apiKey;
 
 let app, auth, db;
 if (hasFirebaseConfig) {
   try {
-    const config = firebaseConfigStr ? JSON.parse(firebaseConfigStr) : manualFirebaseConfig;
-    app = initializeApp(config);
+    app = initializeApp(activeFirebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } catch (error) {
     console.error("Firebase initialization error:", error);
   }
 }
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'temple-tracker-shared';
+
+// データベースの保存先パス用ID（ローカル環境時はデフォルト名を使用）
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'temple-tracker-local';
 
 const PREFECTURE_MAP = [
   { id: '北海道', name: '北海道', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
@@ -139,6 +143,7 @@ export default function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
+  // ローカル環境等でTailwindCSSをCDNから読み込むための処理
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -222,7 +227,7 @@ export default function App() {
     if (!templeName.trim()) return;
     setIsSearching(true);
     setSearchError('');
-    const apiKey = "";
+    const apiKey = ""; // 注意: GitHubに上げる際は、このようなAPIキーは直接書かずにサーバーサイドで処理するか、プロキシを通すのが安全です
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
     
     const userQuery = `${templeName}の所在地と、由緒や特徴などの簡単な説明を教えてください。`;
