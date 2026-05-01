@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - 完全版</title>
+    <title>寺社巡礼録 - AI完全統合版</title>
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -25,10 +25,9 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // ★★★ 【重要】ここにGoogle AI Studioで取得したAPIキーを入力してください ★★★
-        const GEMINI_API_KEY = ""; 
+        // あなたのAPIキーを組み込みました
+        const GEMINI_API_KEY = "AIzaSyAD2GUk4pU1LKvMTcHEFFKMOv4-GPYE_Bg"; 
 
-        // 47都道府県の配置データ
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
             { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
@@ -48,12 +47,7 @@
             const [loading, setLoading] = useState(true);
             const [tab, setTab] = useState('list');
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isChatOpen, setIsChatOpen] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
-            const [chatMessages, setChatMessages] = useState([{ role: 'ai', text: 'お寺の歴史や住所、何でも聞いてくださいね！' }]);
-            const [chatInput, setChatInput] = useState('');
-            const chatEndRef = useRef(null);
-
             const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '', image: null });
 
             const firebaseConfig = {
@@ -75,26 +69,20 @@
                 return () => unsubscribe();
             }, []);
 
-            // チャットの自動スクロール
-            useEffect(() => {
-                chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [chatMessages]);
-
             const stats = useMemo(() => {
                 const s = {};
                 visits.forEach(v => { if(v.location) s[v.location] = true; });
                 return s;
             }, [visits]);
 
-            // --- Gemini API連携: お寺検索 ---
             const fetchTempleInfo = async () => {
                 if (!formData.name) return;
-                if (!GEMINI_API_KEY) { alert("APIキーを設定してください"); return; }
                 setIsSearching(true);
                 try {
-                    const prompt = `日本の「${formData.name}」という寺社について以下の情報をJSONで。
-                    {"address": "正確な住所(都道府県から)", "pref": "都道府県名のみ(例:京都府)", "info": "150文字以内の由緒や見どころ"}
-                    JSONのみ出力して。`;
+                    const prompt = `日本の「${formData.name}」という寺社について、以下の情報を正確に調べてJSON形式で返してください。
+                    {"address": "正確な住所(都道府県から)", "pref": "都道府県名(例:東京都)", "info": "見どころや由来(100文字程度)"}
+                    ※余計な文字は一切含まずJSONデータのみを返してください。`;
+
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -102,35 +90,18 @@
                     });
                     const data = await res.json();
                     const text = data.candidates[0].content.parts[0].text;
-                    const json = JSON.parse(text.replace(/```json|```/g, ""));
-                    setFormData(prev => ({ ...prev, address: json.address, location: json.pref, notes: `【由緒】\n${json.info}\n\n${prev.notes}` }));
-                } catch (e) { alert("情報が見つかりませんでした。"); }
-                setIsSearching(false);
-            };
-
-            // --- Gemini API連携: チャット相談 ---
-            const sendChat = async () => {
-                if (!chatInput.trim() || !GEMINI_API_KEY) return;
-                const userMsg = chatInput;
-                setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
-                setChatInput('');
-                try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: `あなたは日本のお寺に詳しいガイドです。短く親切に答えて。質問: ${userMsg}` }] }] })
-                    });
-                    const data = await res.json();
-                    setChatMessages(prev => [...prev, { role: 'ai', text: data.candidates[0].content.parts[0].text }]);
-                } catch (e) { setChatMessages(prev => [...prev, { role: 'ai', text: 'エラーが発生しました。' }]); }
-            };
-
-            const handleImage = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => setFormData({ ...formData, image: reader.result });
-                    reader.readAsDataURL(file);
+                    const json = JSON.parse(text.replace(/```json|```/g, "").trim());
+                    
+                    setFormData(prev => ({
+                        ...prev,
+                        address: json.address,
+                        location: json.pref,
+                        notes: `【AI解説】\n${json.info}\n\n${prev.notes}`
+                    }));
+                } catch (e) {
+                    alert("情報を取得できませんでした。APIキーが正しいか確認してください。");
+                } finally {
+                    setIsSearching(false);
                 }
             };
 
@@ -141,14 +112,14 @@
                 setFormData({ name: '', location: '', address: '', rating: 5, notes: '', image: null });
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center font-bold">読み込み中...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center font-bold text-[#2c4c3b]">読み込み中...</div>;
 
             return (
-                <div className="max-w-md mx-auto min-h-screen pb-20 relative">
+                <div className="max-w-md mx-auto min-h-screen pb-20">
                     <header className="bg-[#2c4c3b] text-white p-6 shadow-md flex justify-between items-center">
                         <h1 className="text-xl font-bold">⛩️ 寺社巡礼録</h1>
-                        <button onClick={() => setTab(tab === 'list' ? 'map' : 'list')} className="text-xs bg-white/20 px-3 py-1 rounded-full border border-white/30">
-                            {tab === 'list' ? '日本地図' : 'リスト'}
+                        <button onClick={() => setTab(tab === 'list' ? 'map' : 'list')} className="text-xs bg-white/20 px-3 py-1 rounded-full border">
+                            {tab === 'list' ? '地図' : 'リスト'}
                         </button>
                     </header>
 
@@ -157,23 +128,22 @@
                             <div className="space-y-4">
                                 {visits.map(v => (
                                     <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
-                                        {v.image && <img src={v.image} className="w-full h-40 object-cover rounded-lg mb-3 shadow-inner" />}
-                                        <div className="flex justify-between items-start">
-                                            <span className="font-bold text-[#2c4c3b] text-lg">{v.name}</span>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-[#2c4c3b]">{v.name}</span>
                                             <span className="text-amber-400">{'★'.repeat(v.rating)}</span>
                                         </div>
-                                        <div className="text-[10px] text-stone-500 mt-1">{v.address || v.location} | {v.date}</div>
-                                        <p className="text-sm mt-3 text-stone-700 whitespace-pre-wrap leading-relaxed">{v.notes}</p>
+                                        <div className="text-[10px] text-stone-500 mt-1">{v.address}</div>
+                                        <p className="text-sm mt-2 text-stone-600 whitespace-pre-wrap leading-relaxed">{v.notes}</p>
                                     </div>
                                 ))}
-                                {visits.length === 0 && <p className="text-center text-stone-400 pt-20">参拝記録がまだありません</p>}
+                                {visits.length === 0 && <p className="text-center text-stone-400 pt-20">まだ記録がありません</p>}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
                                 <p className="text-center mb-6 font-bold text-stone-600">全国制覇状況: {Object.keys(stats).length} / 47</p>
                                 <div className="map-grid">
                                     {PREFECTURE_MAP.map(p => (
-                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
+                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold shadow-sm' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
                                             {p.name}
                                         </div>
                                     ))}
@@ -182,91 +152,39 @@
                         )}
                     </main>
 
-                    {/* AIチャットボタン */}
-                    <button onClick={() => setIsChatOpen(true)} className="fixed bottom-8 left-8 bg-[#d4af37] text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">🤖</button>
-
-                    {/* 追加ボタン */}
                     <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white w-14 h-14 rounded-full shadow-lg text-3xl font-bold">+</button>
 
-                    {/* AIチャットパネル */}
-                    {isChatOpen && (
-                        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm h-[80vh] flex flex-col overflow-hidden">
-                                <div className="bg-[#2c4c3b] p-4 text-white flex justify-between">
-                                    <span className="font-bold">🤖 お寺コンシェルジュ</span>
-                                    <button onClick={() => setIsChatOpen(false)}>✕</button>
-                                </div>
-                                <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-stone-50">
-                                    {chatMessages.map((m, i) => (
-                                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${m.role === 'user' ? 'bg-[#2c4c3b] text-white' : 'bg-white text-stone-800'}`}>
-                                                {m.text}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div ref={chatEndRef} />
-                                </div>
-                                <div className="p-4 border-t flex gap-2">
-                                    <input className="flex-1 border p-2 rounded-xl" placeholder="お寺について聞く..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendChat()} />
-                                    <button onClick={sendChat} className="bg-[#d4af37] text-white px-4 rounded-xl">送信</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 追加モーダル */}
                     {isModalOpen && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 my-8">
-                                <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録</h2>
-                                
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 overflow-y-auto max-h-[90vh]">
+                                <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500">お寺の名前</label>
-                                    <div className="flex gap-2">
-                                        <input className="flex-1 border p-3 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 清水寺" />
-                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] px-3 rounded-xl text-xs font-bold text-white shadow-sm">
-                                            {isSearching ? <span className="animate-spin">⏳</span> : '✨AI検索'}
+                                    <label className="text-xs font-bold text-stone-500 uppercase">お寺の名前</label>
+                                    <div className="flex gap-2 mt-1">
+                                        <input className="flex-1 border p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#2c4c3b] outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
+                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition">
+                                            {isSearching ? <span className="animate-spin text-lg">⏳</span> : '✨AI検索'}
                                         </button>
                                     </div>
                                 </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-stone-500">住所</label>
-                                    <input className="w-full border p-3 rounded-xl text-xs" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="AI検索で自動入力されます" />
+                                <div className="text-xs bg-stone-50 p-3 rounded-xl border border-dashed border-stone-200">
+                                    <p className="font-bold text-[#2c4c3b] mb-1">AI自動取得情報:</p>
+                                    <p>📍 住所: {formData.address || '未取得'}</p>
+                                    <p>都道府: {formData.location || '未取得'}</p>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label className="text-xs font-bold text-stone-500">都道府県</label>
-                                        <select className="w-full border p-3 rounded-xl text-xs" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required>
-                                            <option value="">選択</option>
-                                            {PREFECTURE_MAP.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-stone-500">評価</label>
-                                        <div className="flex text-amber-400 mt-2 text-lg">
-                                            {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
-                                        </div>
+                                <div>
+                                    <label className="text-xs font-bold text-stone-500 uppercase">評価</label>
+                                    <div className="flex text-amber-400 text-xl mt-1">
+                                        {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
                                     </div>
                                 </div>
-
                                 <div>
-                                    <label className="text-xs font-bold text-stone-500">写真を追加</label>
-                                    <div className="mt-1 flex items-center gap-2">
-                                        <input type="file" accept="image/*" onChange={handleImage} className="text-xs w-full" />
-                                        {formData.image && <div className="w-10 h-10 bg-stone-200 rounded overflow-hidden"><img src={formData.image} className="w-full h-full object-cover" /></div>}
-                                    </div>
+                                    <label className="text-xs font-bold text-stone-500 uppercase">日記・感想</label>
+                                    <textarea className="w-full border p-3 rounded-xl h-24 text-xs mt-1 leading-relaxed" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="御朱印や見どころの感想など..." />
                                 </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-stone-500">日記・感想</label>
-                                    <textarea className="w-full border p-3 rounded-xl h-32 text-sm leading-relaxed" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="御朱印の情報や感想など..." />
-                                </div>
-
                                 <div className="flex gap-2 pt-2">
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-stone-100 p-4 rounded-2xl font-bold">戻る</button>
-                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">保存</button>
+                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">記録を保存</button>
                                 </div>
                             </form>
                         </div>
