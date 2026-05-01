@@ -8,39 +8,33 @@
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@0.321.0"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <style>
         body { background-color: #f4f1eb; }
-        .map-grid { 
-            display: grid; 
-            grid-template-columns: repeat(16, 1fr); 
-            gap: 2px; 
-            max-width: 600px; 
-            margin: 0 auto; 
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-        }
-        .pref-tile { 
-            aspect-ratio: 1; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 8px; 
-            border-radius: 2px;
-            cursor: default;
-        }
+        .map-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; max-width: 600px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; }
+        .pref-tile { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 8px; border-radius: 2px; }
+        .chat-window { height: 400px; display: flex; flex-direction: column; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
+        const { MapPin, Calendar, Star, BookOpen, Plus, X, Bot, Send, ImageIcon } = window.lucide;
 
-        // --- 47都道府県 完全版データ ---
+        // Firebase設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
+            authDomain: "otera-meguri.firebaseapp.com",
+            projectId: "otera-meguri",
+            storageBucket: "otera-meguri.firebasestorage.app",
+            appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
+        };
+
         const PREFECTURE_MAP = [
             { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
             { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
@@ -59,21 +53,18 @@
             const [visits, setVisits] = useState([]);
             const [tab, setTab] = useState('list');
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [formData, setFormData] = useState({ name: '', location: '', rating: 5, notes: '' });
-
-            const firebaseConfig = {
-                apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
-                authDomain: "otera-meguri.firebaseapp.com",
-                projectId: "otera-meguri",
-                storageBucket: "otera-meguri.firebasestorage.app",
-                appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
-            };
+            const [isChatOpen, setIsChatOpen] = useState(false);
+            const [formData, setFormData] = useState({ name: '', location: '', rating: 5, notes: '', image: null });
+            
+            // チャット用
+            const [chatMessages, setChatMessages] = useState([{ role: 'bot', text: 'こんにちは！お寺について何かお手伝いしましょうか？' }]);
+            const [chatInput, setChatInput] = useState('');
 
             useEffect(() => {
                 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                 const db = firebase.firestore();
                 firebase.auth().signInAnonymously();
-                const unsubscribe = db.collection('visits').onSnapshot(snap => {
+                const unsubscribe = db.collection('visits').orderBy('date', 'desc').onSnapshot(snap => {
                     setVisits(snap.docs.map(doc => ({id: doc.id, ...doc.data()})));
                 });
                 return () => unsubscribe();
@@ -85,32 +76,50 @@
                 return s;
             }, [visits]);
 
+            // 写真の処理
+            const handleImage = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setFormData({ ...formData, image: reader.result });
+                    reader.readAsDataURL(file);
+                }
+            };
+
             const handleSave = async (e) => {
                 e.preventDefault();
-                await firebase.firestore().collection('visits').add({
-                    ...formData,
-                    date: new Date().toISOString().split('T')[0]
-                });
+                await firebase.firestore().collection('visits').add({ ...formData, date: new Date().toISOString().split('T')[0] });
                 setIsModalOpen(false);
-                setFormData({ name: '', location: '', rating: 5, notes: '' });
+                setFormData({ name: '', location: '', rating: 5, notes: '', image: null });
+            };
+
+            const sendChat = () => {
+                if (!chatInput.trim()) return;
+                setChatMessages([...chatMessages, { role: 'user', text: chatInput }]);
+                setChatInput('');
+                // 本来はここにGemini APIを叩く処理を入れます
+                setTimeout(() => {
+                    setChatMessages(prev => [...prev, { role: 'bot', text: 'AIコンシェルジュが回答を準備中です（APIキーを設定すると動きます！）' }]);
+                }, 1000);
             };
 
             return (
-                <div className="max-w-md mx-auto min-h-screen pb-20">
-                    <header className="bg-[#2c4c3b] text-white p-6 shadow-md">
-                        <h1 className="text-xl font-bold text-center">寺社巡礼録</h1>
+                <div className="max-w-md mx-auto min-h-screen pb-20 relative">
+                    <header className="bg-[#2c4c3b] text-white p-6 shadow-md flex items-center gap-2">
+                        <BookOpen size={24} /> <h1 className="text-xl font-bold">寺社巡礼録</h1>
                     </header>
 
-                    <div className="flex bg-white shadow-sm">
+                    <nav className="flex bg-white shadow-sm sticky top-0 z-10">
                         <button onClick={() => setTab('list')} className={`flex-1 p-3 font-bold ${tab === 'list' ? 'text-[#2c4c3b] border-b-4 border-[#2c4c3b]' : 'text-stone-400'}`}>リスト</button>
                         <button onClick={() => setTab('map')} className={`flex-1 p-3 font-bold ${tab === 'map' ? 'text-[#2c4c3b] border-b-4 border-[#2c4c3b]' : 'text-stone-400'}`}>日本地図</button>
-                    </div>
+                    </nav>
 
                     <main className="p-4">
                         {tab === 'list' ? (
                             <div className="space-y-4">
                                 {visits.map(v => (
-                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm">
+                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200 overflow-hidden">
+                                        {v.image && <img src={v.image} className="w-full h-40 object-cover rounded-lg mb-3" />}
                                         <div className="flex justify-between">
                                             <span className="font-bold text-[#2c4c3b]">{v.name}</span>
                                             <span className="text-amber-400">{'★'.repeat(v.rating)}</span>
@@ -119,7 +128,6 @@
                                         <div className="text-sm mt-2 text-stone-600">{v.notes}</div>
                                     </div>
                                 ))}
-                                {visits.length === 0 && <p className="text-center text-stone-400 pt-10">まだ記録がありません</p>}
                             </div>
                         ) : (
                             <div className="bg-white p-4 rounded-xl shadow-sm">
@@ -135,12 +143,46 @@
                         )}
                     </main>
 
+                    {/* AIチャットボタン */}
+                    <button onClick={() => setIsChatOpen(!isChatOpen)} className="fixed bottom-8 left-8 bg-[#d4af37] text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center">
+                        <Bot size={28} />
+                    </button>
+
+                    {/* 追加ボタン */}
                     <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white w-14 h-14 rounded-full shadow-lg text-3xl font-bold">+</button>
 
+                    {/* AIチャット画面 */}
+                    {isChatOpen && (
+                        <div className="fixed bottom-24 left-4 right-4 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden z-50 chat-window">
+                            <div className="bg-[#2c4c3b] text-white p-4 flex justify-between">
+                                <span className="font-bold flex items-center gap-2"><Bot size={18}/> コンシェルジュ</span>
+                                <button onClick={() => setIsChatOpen(false)}><X size={20}/></button>
+                            </div>
+                            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#f9f8f6]">
+                                {chatMessages.map((m, i) => (
+                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-[#2c4c3b] text-white' : 'bg-white shadow-sm'}`}>
+                                            {m.text}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="p-3 border-t flex gap-2">
+                                <input className="flex-1 bg-stone-100 p-2 rounded-lg text-sm" placeholder="お寺について聞く..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendChat()} />
+                                <button onClick={sendChat} className="bg-[#d4af37] text-white p-2 rounded-lg"><Send size={18}/></button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 追加モーダル */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                             <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4 overflow-y-auto max-h-[90vh]">
                                 <h2 className="font-bold text-[#2c4c3b]">参拝記録を追加</h2>
+                                <div className="border-2 border-dashed border-stone-200 rounded-xl p-4 text-center">
+                                    {formData.image ? <img src={formData.image} className="h-32 mx-auto rounded-lg mb-2" /> : <div className="text-stone-300 mb-2"><ImageIcon size={48} className="mx-auto" /></div>}
+                                    <input type="file" accept="image/*" onChange={handleImage} className="text-xs" />
+                                </div>
                                 <input placeholder="寺社名" className="w-full border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
                                 <select className="w-full border p-2 rounded" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required>
                                     <option value="">都道府県を選択</option>
@@ -148,9 +190,7 @@
                                 </select>
                                 <div className="flex items-center gap-2">
                                     <span>評価:</span>
-                                    {[1,2,3,4,5].map(n => (
-                                        <button key={n} type="button" onClick={() => setFormData({...formData, rating: n})} className={n <= formData.rating ? 'text-amber-400 text-xl' : 'text-stone-300 text-xl'}>★</button>
-                                    ))}
+                                    {[1,2,3,4,5].map(n => <button key={n} type="button" onClick={() => setFormData({...formData, rating: n})} className={n <= formData.rating ? 'text-amber-400' : 'text-stone-300'}>★</button>)}
                                 </div>
                                 <textarea placeholder="感想" className="w-full border p-2 rounded h-20" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
                                 <div className="flex gap-2">
@@ -163,7 +203,6 @@
                 </div>
             );
         }
-
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
