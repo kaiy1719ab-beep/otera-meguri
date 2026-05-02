@@ -1,228 +1,596 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寺社巡礼録 - AI安定版</title>
-    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <style>
-        body { background-color: #f4f1eb; font-family: sans-serif; }
-        .map-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; max-width: 600px; margin: 0 auto; background: white; padding: 10px; border-radius: 12px; }
-        .pref-tile { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 8px; border-radius: 2px; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; display: inline-block; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { MapPin, Calendar, Star, BookOpen, Plus, Search, X, Trash2, Pencil, Map, Loader2, Globe, Bot, Send, ImageIcon, ArrowUpDown, User, Cloud, CloudOff } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+// ==========================================
+// ★ 環境設定エリア ★
+// GitHub等で管理する場合、本来は「.env」ファイルに隠すのがベストですが、
+// 今回は簡単に動かすためにここに直接記述しています。
+// ==========================================
 
-        const PREFECTURE_MAP = [
-            { id: '北海道', name: '北海', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
-            { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
-            { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 },
-            { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 },
-            { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 },
-            { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 },
-            { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 },
-            { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈', x: 12, y: 8 },
-            { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌', x: 6,  y: 9 },
-            { id: '鹿児島県', name: '鹿児', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 },
-            { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }
-        ];
+const firebaseConfig = {
+  apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
+  authDomain: "otera-meguri.firebaseapp.com",
+  projectId: "otera-meguri",
+  storageBucket: "otera-meguri.firebasestorage.app",
+  messagingSenderId: "963990099437",
+  appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4",
+  measurementId: "G-3P3VD1SP42"
+};
 
-        function App() {
-            // ★ キーをブラウザだけに保存する仕組み (GitHubには公開されません)
-            const [apiKey, setApiKey] = useState(localStorage.getItem('my_secret_gemini_key') || '');
-            const [visits, setVisits] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [tab, setTab] = useState('list');
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isSearching, setIsSearching] = useState(false);
-            const [searchError, setSearchError] = useState("");
-            const [formData, setFormData] = useState({ name: '', location: '', address: '', rating: 5, notes: '' });
+// ==========================================
+// システム初期化（外部環境・ローカル環境両対応）
+// ==========================================
 
-            const firebaseConfig = {
-                apiKey: "AIzaSyAD2gBnNr_wR5Q4KTAYKY8AUhCqUTqAf5Y",
-                authDomain: "otera-meguri.firebaseapp.com",
-                projectId: "otera-meguri",
-                storageBucket: "otera-meguri.firebasestorage.app",
-                appId: "1:963990099437:web:b68fdf1c04c54d185fc3e4"
-            };
+// AI環境(Canvas)特有の変数を読み込みつつ、GitHub等のローカル環境では上の firebaseConfig を使用する仕組み
+const envFirebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+const activeFirebaseConfig = envFirebaseConfigStr ? JSON.parse(envFirebaseConfigStr) : firebaseConfig;
+const hasFirebaseConfig = activeFirebaseConfig && activeFirebaseConfig.apiKey;
 
-            useEffect(() => {
-                let unsubscribe = () => {};
-                const timer = setTimeout(() => setLoading(false), 2000);
-                try {
-                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-                    const db = firebase.firestore();
-                    firebase.auth().signInAnonymously().catch(() => {});
-                    unsubscribe = db.collection('visits').orderBy('date', 'desc').onSnapshot(snap => {
-                        setVisits(snap.docs.map(doc => ({id: doc.id, ...doc.data()})));
-                        clearTimeout(timer); setLoading(false);
-                    }, () => { clearTimeout(timer); setLoading(false); });
-                } catch (e) { clearTimeout(timer); setLoading(false); }
-                return () => { clearTimeout(timer); unsubscribe(); };
-            }, []);
+let app, auth, db;
+if (hasFirebaseConfig) {
+  try {
+    app = initializeApp(activeFirebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (error) {
+    console.error("Firebase initialization error:", error);
+  }
+}
 
-            const stats = useMemo(() => {
-                const s = {};
-                visits.forEach(v => { if(v.location) s[v.location] = true; });
-                return s;
-            }, [visits]);
+// データベースの保存先パス用ID（ローカル環境時はデフォルト名を使用）
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'temple-tracker-local';
 
-            const fetchTempleInfo = async () => {
-                if (!formData.name) return;
-                if (!apiKey) { setSearchError("❌ 上の入力欄にAIキーを貼り付けてください"); return; }
-                setIsSearching(true);
-                setSearchError(""); 
-                
-                try {
-                    const prompt = `日本の寺社「${formData.name}」について調べてください。`;
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            contents: [{ parts: [{ text: prompt }] }],
-                            generationConfig: {
-                                responseMimeType: "application/json",
-                                responseSchema: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        address: { type: "STRING" },
-                                        pref: { type: "STRING" },
-                                        info: { type: "STRING" }
-                                    },
-                                    required: ["address", "pref", "info"]
-                                }
-                            }
-                        })
-                    });
-                    
-                    const data = await res.json();
-                    if (data.error) throw new Error(data.error.message);
-                    const text = data.candidates[0].content.parts[0].text;
-                    const json = JSON.parse(text);
-                    const matchedPref = PREFECTURE_MAP.find(p => json.pref.includes(p.name))?.id || "";
+const PREFECTURE_MAP = [
+  { id: '北海道', name: '北海道', x: 15, y: 0 }, { id: '青森県', name: '青森', x: 15, y: 1 },
+  { id: '秋田県', name: '秋田', x: 14, y: 2 }, { id: '岩手県', name: '岩手', x: 15, y: 2 },
+  { id: '山形県', name: '山形', x: 14, y: 3 }, { id: '宮城県', name: '宮城', x: 15, y: 3 },
+  { id: '新潟県', name: '新潟', x: 13, y: 4 }, { id: '福島県', name: '福島', x: 14, y: 4 },
+  { id: '石川県', name: '石川', x: 11, y: 5 }, { id: '富山県', name: '富山', x: 12, y: 5 }, { id: '群馬県', name: '群馬', x: 13, y: 5 }, { id: '栃木県', name: '栃木', x: 14, y: 5 }, { id: '茨城県', name: '茨城', x: 15, y: 5 },
+  { id: '福井県', name: '福井', x: 10, y: 6 }, { id: '岐阜県', name: '岐阜', x: 11, y: 6 }, { id: '長野県', name: '長野', x: 12, y: 6 }, { id: '埼玉県', name: '埼玉', x: 13, y: 6 }, { id: '千葉県', name: '千葉', x: 14, y: 6 },
+  { id: '山口県', name: '山口', x: 3,  y: 7 }, { id: '島根県', name: '島根', x: 4,  y: 7 }, { id: '鳥取県', name: '鳥取', x: 5,  y: 7 }, { id: '兵庫県', name: '兵庫', x: 6,  y: 7 }, { id: '京都府', name: '京都', x: 7,  y: 7 }, { id: '滋賀県', name: '滋賀', x: 8,  y: 7 }, { id: '愛知県', name: '愛知', x: 10, y: 7 }, { id: '山梨県', name: '山梨', x: 11, y: 7 }, { id: '東京都', name: '東京', x: 12, y: 7 },
+  { id: '佐賀県', name: '佐賀', x: 1,  y: 8 }, { id: '福岡県', name: '福岡', x: 2,  y: 8 }, { id: '広島県', name: '広島', x: 4,  y: 8 }, { id: '岡山県', name: '岡山', x: 5,  y: 8 }, { id: '大阪府', name: '大阪', x: 6,  y: 8 }, { id: '奈良県', name: '奈良', x: 7,  y: 8 }, { id: '三重県', name: '三重', x: 8,  y: 8 }, { id: '静岡県', name: '静岡', x: 10, y: 8 }, { id: '神奈川県', name: '神奈川', x: 12, y: 8 },
+  { id: '長崎県', name: '長崎', x: 1,  y: 9 }, { id: '熊本県', name: '熊本', x: 2,  y: 9 }, { id: '大分県', name: '大分', x: 3,  y: 9 }, { id: '和歌山県', name: '和歌山', x: 6,  y: 9 },
+  { id: '鹿児島県', name: '鹿児島', x: 2, y: 10}, { id: '宮崎県', name: '宮崎', x: 3, y: 10}, { id: '香川県', name: '香川', x: 5, y: 10 }, { id: '徳島県', name: '徳島', x: 6, y: 10 },
+  { id: '沖縄県', name: '沖縄', x: 0,  y: 11 }, { id: '愛媛県', name: '愛媛', x: 5, y: 11 }, { id: '高知県', name: '高知', x: 6, y: 11 }
+];
 
-                    setFormData(prev => ({
-                        ...prev,
-                        address: json.address || "",
-                        location: matchedPref,
-                        notes: json.info ? `【AI情報】\n${json.info}\n\n${prev.notes}` : prev.notes
-                    }));
-                } catch (e) {
-                    setSearchError("❌ エラー: " + e.message);
-                } finally {
-                    setIsSearching(false);
-                }
-            };
+function extractPrefecture(locationStr) {
+  if (!locationStr) return null;
+  const prefs = PREFECTURE_MAP.map(p => p.id);
+  const shorts = PREFECTURE_MAP.map(p => p.name);
+  for (const p of prefs) if (locationStr.includes(p)) return p;
+  for (let i = 0; i < shorts.length; i++) if (locationStr.includes(shorts[i])) return prefs[i];
+  return null;
+}
 
-            const handleSave = async (e) => {
-                e.preventDefault();
-                await firebase.firestore().collection('visits').add({ ...formData, date: new Date().toISOString().split('T')[0] });
-                setIsModalOpen(false);
-                setFormData({ name: '', location: '', address: '', rating: 5, notes: '' });
-                setSearchError("");
-            };
+// 日本地図コンポーネント
+function JapanMap({ visits }) {
+  const stats = useMemo(() => {
+    const s = {};
+    PREFECTURE_MAP.forEach(p => s[p.id] = 0);
+    visits.forEach(v => {
+      const pref = extractPrefecture(v.location);
+      if (pref) s[pref]++;
+    });
+    return s;
+  }, [visits]);
 
-            if (loading) return <div className="h-screen flex items-center justify-center font-bold">アプリを起動中...</div>;
+  const visitedCount = Object.values(stats).filter(c => c > 0).length;
 
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-200 overflow-x-auto">
+      <div className="mb-8 flex justify-between items-center min-w-[700px]">
+        <h2 className="text-xl font-bold text-[#2c4c3b] flex items-center gap-2"><MapPin size={24} /> みんなの色塗り日本地図</h2>
+        <div className="text-sm font-bold text-stone-600 bg-stone-100 px-4 py-2 rounded-full border border-stone-200">
+          全国制覇状況: <span className="text-[#d4af37] text-lg mx-1">{visitedCount}</span> / 47 都道府県
+        </div>
+      </div>
+      <div className="min-w-[700px] flex justify-center py-4">
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(16, 42px)', gridTemplateRows: 'repeat(12, 42px)' }}>
+          {PREFECTURE_MAP.map(pref => {
+            const count = stats[pref.id];
+            let bgColor = 'bg-stone-100 text-stone-400 border-stone-200';
+            if (count === 1) bgColor = 'bg-[#a3c2b2] text-white border-[#8bb09d]';
+            else if (count === 2) bgColor = 'bg-[#5c8a70] text-white border-[#4d7860]';
+            else if (count === 3) bgColor = 'bg-[#2c4c3b] text-white border-[#1e3629] shadow-inner font-bold';
+            else if (count >= 4) bgColor = 'bg-[#15241b] text-[#d4af37] border-[#0a120e] shadow-inner font-bold';
+            
             return (
-                <div className="max-w-md mx-auto min-h-screen pb-20 relative text-stone-800">
-                    <header className="bg-[#2c4c3b] text-white p-6 shadow-md">
-                        <div className="flex justify-between items-center mb-4">
-                            <h1 className="text-xl font-bold">⛩️ 寺社巡礼録</h1>
-                            <button onClick={() => setTab(tab === 'list' ? 'map' : 'list')} className="text-xs bg-white/20 px-3 py-1 rounded-full border border-white/30">
-                                {tab === 'list' ? '地図' : 'リスト'}
-                            </button>
-                        </div>
-                        {/* ★ キーの入力欄 ★ */}
-                        <div className="bg-white/10 p-2 rounded-lg border border-white/20">
-                            <label className="text-[10px] uppercase font-bold block mb-1 opacity-70">Gemini API Key (Settings)</label>
-                            <input 
-                                type="password" 
-                                className="w-full bg-transparent border-b border-white/40 text-xs py-1 outline-none focus:border-white"
-                                value={apiKey}
-                                onChange={(e) => {
-                                    setApiKey(e.target.value);
-                                    localStorage.setItem('my_secret_gemini_key', e.target.value);
-                                }}
-                                placeholder="AIza... をここに貼り付け"
-                            />
-                        </div>
-                    </header>
-
-                    <main className="p-4">
-                        {tab === 'list' ? (
-                            <div className="space-y-4">
-                                {visits.map(v => (
-                                    <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-stone-200">
-                                        <div className="flex justify-between items-start">
-                                            <span className="font-bold text-[#2c4c3b] text-lg">{v.name}</span>
-                                            <span className="text-amber-400">{'★'.repeat(v.rating)}</span>
-                                        </div>
-                                        <div className="text-[10px] text-stone-500 mt-1">{v.address || v.location}</div>
-                                        <p className="text-sm mt-3 text-stone-700 whitespace-pre-wrap leading-relaxed">{v.notes}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="bg-white p-4 rounded-xl shadow-sm">
-                                <p className="text-center mb-6 font-bold text-stone-600">全国踏破数: {Object.keys(stats).length} / 47</p>
-                                <div className="map-grid">
-                                    {PREFECTURE_MAP.map(p => (
-                                        <div key={p.id} className={`pref-tile ${stats[p.id] ? 'bg-[#2c4c3b] text-white font-bold shadow-md' : 'bg-stone-100 text-stone-300'}`} style={{ gridColumn: p.x + 1, gridRow: p.y + 1 }}>
-                                            {p.name}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </main>
-
-                    <button onClick={() => setIsModalOpen(true)} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white w-14 h-14 rounded-full shadow-lg text-3xl font-bold">+</button>
-
-                    {isModalOpen && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-                            <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl my-8">
-                                <h2 className="font-bold text-xl text-[#2c4c3b] border-b pb-2">参拝記録を追加</h2>
-                                <div>
-                                    <div className="flex gap-2 mt-1">
-                                        <input className="flex-1 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="例: 田無神社" />
-                                        <button type="button" onClick={fetchTempleInfo} className="bg-[#d4af37] text-white px-4 rounded-xl text-xs font-bold shadow-sm">
-                                            {isSearching ? <span className="animate-spin text-lg">⏳</span> : '✨AI検索'}
-                                        </button>
-                                    </div>
-                                    {searchError && <div className="bg-red-100 text-red-600 p-2 rounded-lg mt-2 text-[10px] font-bold break-all">{searchError}</div>}
-                                </div>
-                                <div className="text-[10px] bg-stone-50 p-3 rounded-xl border border-dashed text-stone-600">
-                                    <p>📍 住所: {formData.address || '（未取得）'}</p>
-                                    <p>🏛️ 県名: {formData.location || '（未選択）'}</p>
-                                </div>
-                                <div className="flex text-amber-400 text-xl">
-                                    {[1,2,3,4,5].map(n => <span key={n} onClick={() => setFormData({...formData, rating: n})} className="cursor-pointer">{n <= formData.rating ? '★' : '☆'}</span>)}
-                                </div>
-                                <textarea className="w-full border p-3 rounded-xl h-24 text-xs" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="感想など..." />
-                                <div className="flex gap-2">
-                                    <button type="button" onClick={() => { setIsModalOpen(false); setSearchError(""); }} className="flex-1 bg-stone-100 p-4 rounded-2xl font-bold">戻る</button>
-                                    <button type="submit" className="flex-1 bg-[#2c4c3b] text-white p-4 rounded-2xl font-bold shadow-lg">保存</button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
+              <div key={pref.id} className={`border rounded-md flex flex-col items-center justify-center text-xs transition-colors hover:ring-2 hover:ring-amber-400 cursor-default relative group ${bgColor}`} style={{ gridColumn: pref.x + 1, gridRow: pref.y + 1 }}>
+                <span>{pref.name}</span>
+                {count > 0 && <span className="text-[10px] opacity-90">{count}</span>}
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-stone-800 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity shadow-lg">
+                  {pref.id}: {count}回
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-stone-800"></div>
                 </div>
+              </div>
             );
+          })}
+        </div>
+      </div>
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-stone-600 border-t border-stone-100 pt-6 min-w-[700px]">
+        <span className="flex items-center gap-2"><div className="w-5 h-5 bg-stone-100 border border-stone-200 rounded"></div>未参拝</span>
+        <span className="flex items-center gap-2"><div className="w-5 h-5 bg-[#a3c2b2] border border-[#8bb09d] rounded"></div>1回</span>
+        <span className="flex items-center gap-2"><div className="w-5 h-5 bg-[#5c8a70] border border-[#4d7860] rounded"></div>2回</span>
+        <span className="flex items-center gap-2"><div className="w-5 h-5 bg-[#2c4c3b] border border-[#1e3629] rounded"></div>3回</span>
+        <span className="flex items-center gap-2"><div className="w-5 h-5 bg-[#15241b] border border-[#0a120e] rounded"></div>4回以上</span>
+      </div>
+    </div>
+  );
+}
+
+// メインアプリケーション
+export default function App() {
+  const [activeTab, setActiveTab] = useState('list');
+  const [visits, setVisits] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [minRatingFilter, setMinRatingFilter] = useState(0);
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatScrollRef = useRef(null);
+
+  // ローカル環境等でTailwindCSSをCDNから読み込むための処理
+  useEffect(() => {
+    if (!document.getElementById('tailwind-cdn')) {
+      const script = document.createElement('script');
+      script.id = 'tailwind-cdn';
+      script.src = 'https://cdn.tailwindcss.com';
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  const [formData, setFormData] = useState({
+    name: '', date: new Date().toISOString().split('T')[0], location: '', rating: 3, notes: '', image: null, userName: ''
+  });
+
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
-</body>
-</html>
+      } catch (error) { console.error("Auth init error:", error); }
+    };
+    initAuth();
+    
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      const savedName = localStorage.getItem('templeTracker_userName');
+      if (savedName) setFormData(prev => ({ ...prev, userName: savedName }));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !db) { setLoading(false); return; }
+    setLoading(true);
+    const visitsRef = collection(db, 'artifacts', appId, 'public', 'data', 'temple_visits');
+    const unsubscribe = onSnapshot(visitsRef, (snapshot) => {
+      const fetchedVisits = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      fetchedVisits.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setVisits(fetchedVisits);
+      setLoading(false);
+    }, (error) => { console.error("Firestore error:", error); setLoading(false); });
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, isChatLoading]);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width; let height = img.height;
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        setFormData(prev => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.6) }));
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const fetchTempleInfo = async (templeName) => {
+    if (!templeName.trim()) return;
+    setIsSearching(true);
+    setSearchError('');
+    const apiKey = ""; // 注意: GitHubに上げる際は、このようなAPIキーは直接書かずにサーバーサイドで処理するか、プロキシを通すのが安全です
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    
+    const userQuery = `${templeName}の所在地と、由緒や特徴などの簡単な説明を教えてください。`;
+    const systemPrompt = "あなたは日本の寺社仏閣の専門家です。指定されたお寺の情報をGoogle検索を使って調べ、必ず以下のJSONフォーマットのみで回答してください。マークダウン表記（バッククォートなど）は使わず、生のJSON文字列のみを出力してください。\n{\n  \"location\":\"都道府県・市区町村（例: 京都府京都市）\",\n  \"description\":\"由緒や特徴などの説明（150文字程度）\"\n}";
+    
+    const payload = {
+      contents: [{ parts: [{ text: userQuery }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      tools: [{ google_search: {} }]
+    };
+
+    try {
+      const delays = [1000, 2000, 4000, 8000, 16000];
+      let result;
+      let fetchError;
+      
+      for (let i = 0; i < 5; i++) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          result = await response.json();
+          fetchError = null;
+          break;
+        } catch (err) {
+          fetchError = err;
+          if (i < 4) await new Promise(r => setTimeout(r, delays[i]));
+        }
+      }
+      
+      if (fetchError) throw fetchError;
+      
+      if (result && result.candidates && result.candidates[0]) {
+        let text = result.candidates[0].content.parts[0].text;
+        text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        
+        try {
+          const data = JSON.parse(text);
+          setFormData(prev => ({
+            ...prev,
+            location: prev.location || data.location || '',
+            notes: prev.notes ? `${prev.notes}\n\n【ネット情報】\n${data.description}` : `【ネット情報】\n${data.description}`
+          }));
+        } catch (parseError) {
+          setFormData(prev => ({
+            ...prev,
+            notes: prev.notes ? `${prev.notes}\n\n【ネット情報】\n${text}` : `【ネット情報】\n${text}`
+          }));
+        }
+      } else {
+        setSearchError('情報が見つかりませんでした。');
+      }
+    } catch (error) {
+      console.error("Search failed:", error);
+      setSearchError('情報の取得に失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleChatSubmit = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMessage = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    const apiKey = "";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    
+    const contents = chatMessages.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+    contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+    const systemPrompt = "あなたは日本の寺社仏閣に詳しい専門家AIアシスタントです。ユーザーからの寺社に関する質問に、親切かつ分かりやすく答えてください。";
+    
+    const payload = {
+      contents: contents,
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      tools: [{ google_search: {} }]
+    };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      
+      if (result && result.candidates && result.candidates[0]) {
+        const text = result.candidates[0].content.parts[0].text;
+        setChatMessages(prev => [...prev, { role: 'model', content: text }]);
+      } else {
+        setChatMessages(prev => [...prev, { role: 'model', content: '申し訳ありません、うまく回答を取得できませんでした。' }]);
+      }
+    } catch (error) {
+      console.error("Chat failed:", error);
+      setChatMessages(prev => [...prev, { role: 'model', content: 'エラーが発生しました。時間をおいて再度お試しください。' }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const handleAddNew = () => {
+    setEditingId(null);
+    setSearchError('');
+    setFormData(prev => ({ ...prev, name: '', date: new Date().toISOString().split('T')[0], location: '', rating: 3, notes: '', image: null }));
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (visit) => {
+    setFormData({
+      name: visit.name || '', date: visit.date || '', location: visit.location || '', rating: visit.rating || 3, notes: visit.notes || '', image: visit.image || null, userName: visit.userName || ''
+    });
+    setEditingId(visit.id);
+    setSearchError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !user || !db) return;
+    if (formData.userName) localStorage.setItem('templeTracker_userName', formData.userName);
+    
+    const visitData = { 
+      name: formData.name, date: formData.date, location: formData.location, rating: formData.rating, notes: formData.notes, image: formData.image,
+      userName: formData.userName || '匿名', userId: user.uid
+    };
+    
+    try {
+      if (editingId) {
+        visitData.updatedAt = Date.now();
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'temple_visits', editingId), visitData);
+      } else {
+        visitData.createdAt = Date.now();
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'temple_visits'), visitData);
+      }
+      setIsModalOpen(false);
+    } catch (error) { console.error(error); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!user || !db) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'temple_visits', id));
+    } catch (error) { console.error(error); }
+  };
+
+  if (!hasFirebaseConfig) {
+    return (
+      <div className="min-h-screen bg-[#f4f1eb] flex items-center justify-center p-4 font-sans text-stone-800">
+        <div className="bg-white p-10 rounded-2xl shadow-xl max-w-2xl w-full border border-stone-200">
+          <h1 className="text-2xl font-bold mb-6 text-[#2c4c3b] flex items-center gap-2"><BookOpen /> アプリの設定が必要です</h1>
+          <p className="mb-4 leading-relaxed">Firebaseの設定が完了していません。コンソールでアプリを追加し、コードの12行目付近に設定を貼り付けてください。</p>
+          <div className="bg-stone-50 p-4 rounded-lg text-sm space-y-2">
+            <p>1. 画面上の <b>「＋ アプリを追加」</b> を押す</p>
+            <p>2. <b>ウェブアイコン「&lt;/&gt;」</b> を押して登録</p>
+            <p>3. 表示された <b>firebaseConfig</b> をコピーして貼り付け</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredVisits = visits.filter(v => {
+    if (minRatingFilter > 0 && v.rating < minRatingFilter) return false;
+    const q = searchQuery.toLowerCase();
+    return !q || (v.name && v.name.toLowerCase().includes(q)) || (v.location && v.location.toLowerCase().includes(q)) || (v.userName && v.userName.toLowerCase().includes(q));
+  }).sort((a, b) => {
+    const dateA = new Date(a.date);
+    const dateB = new Date(b.date);
+    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+  });
+
+  const StarDisplay = ({ rating }) => (
+    <div className="flex text-amber-500">
+      {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={16} fill={star <= rating ? "currentColor" : "none"} className={star <= rating ? "text-amber-500" : "text-stone-300"} />)}
+    </div>
+  );
+
+  const StarRatingInput = () => (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button key={star} type="button" onClick={() => setFormData({...formData, rating: star})} className="focus:outline-none transition-transform hover:scale-110">
+          <Star size={28} fill={star <= formData.rating ? "currentColor" : "none"} className={star <= formData.rating ? "text-amber-500" : "text-stone-300"} />
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#f4f1eb] font-sans text-stone-800 pb-20">
+      <header className="bg-[#2c4c3b] text-white p-6 shadow-md sticky top-0 z-10 flex justify-between items-center">
+        <div className="max-w-4xl mx-auto w-full flex justify-between items-center">
+          <div className="flex items-center gap-3"><BookOpen size={28} className="text-[#d4af37]" /><h1 className="text-2xl font-bold">寺社巡礼録</h1></div>
+          <div className="bg-white/10 px-4 py-2 rounded-full text-sm font-bold flex gap-2 items-center"><Cloud size={16} className="text-blue-300" /> 共有数: <span className="text-[#d4af37]">{visits.length}</span></div>
+        </div>
+      </header>
+      <main className="max-w-4xl mx-auto p-6 mt-4">
+        <div className="flex border-b border-stone-300 mb-8"><button onClick={() => setActiveTab('list')} className={`px-6 py-3 font-bold ${activeTab === 'list' ? 'border-b-2 border-[#2c4c3b] text-[#2c4c3b]' : 'text-stone-400'}`}>リスト</button><button onClick={() => setActiveTab('map')} className={`px-6 py-3 font-bold ${activeTab === 'map' ? 'border-b-2 border-[#2c4c3b] text-[#2c4c3b]' : 'text-stone-400'}`}>日本地図</button></div>
+        
+        {activeTab === 'list' ? (
+          <>
+            <div className="flex flex-col sm:flex-row gap-4 mb-8 relative">
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input type="text" placeholder="名前や場所で検索..." className="w-full pl-10 p-3 rounded-lg border-none shadow-sm focus:ring-2 focus:ring-[#2c4c3b]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              </div>
+              <select className="w-full sm:w-48 p-3 rounded-lg border-none shadow-sm focus:ring-2 focus:ring-[#2c4c3b] bg-white text-stone-700 outline-none" value={minRatingFilter} onChange={(e) => setMinRatingFilter(Number(e.target.value))}>
+                <option value={0}>すべての評価</option>
+                <option value={5}>★★★★★ のみ</option>
+                <option value={4}>★★★★☆ 以上</option>
+                <option value={3}>★★★☆☆ 以上</option>
+              </select>
+              <select className="w-full sm:w-48 p-3 rounded-lg border-none shadow-sm focus:ring-2 focus:ring-[#2c4c3b] bg-white text-stone-700 outline-none" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+                <option value="desc">参拝日: 新しい順</option>
+                <option value="asc">参拝日: 古い順</option>
+              </select>
+            </div>
+            
+            {loading ? <div className="text-center py-20"><Loader2 className="animate-spin mx-auto text-[#2c4c3b]" size={40} /></div> : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {filteredVisits.map((visit) => (
+                  <div key={visit.id} className="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden relative group">
+                    <div className="h-2 bg-[#2c4c3b] shrink-0"></div>
+                    {visit.image && <img src={visit.image} alt="" className="w-full h-48 object-cover border-b" />}
+                    <div className="p-5 pb-16">
+                      <div className="flex justify-between items-start mb-2"><h2 className="text-xl font-bold text-[#2c4c3b]">{visit.name}</h2><StarDisplay rating={visit.rating} /></div>
+                      <div className="text-xs text-stone-500 space-y-1 mb-3">
+                        <p className="flex items-center gap-1"><Calendar size={12} /> {visit.date}</p>
+                        <p className="flex items-center gap-1"><MapPin size={12} /> {visit.location}</p>
+                        <p className="flex items-center gap-1 font-bold text-stone-700"><User size={12} /> {visit.userName}</p>
+                      </div>
+                      {visit.notes && <p className="bg-[#f9f8f6] p-3 rounded-lg text-sm italic border border-stone-100 whitespace-pre-wrap">{visit.notes}</p>}
+                    </div>
+                    <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEditModal(visit)} className="p-2 text-stone-400 hover:text-[#2c4c3b] hover:bg-stone-100 rounded-full"><Pencil size={18} /></button>
+                      <button onClick={() => handleDelete(visit.id)} className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={18} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : <JapanMap visits={visits} />}
+      </main>
+
+      {/* フローティングチャットボタン */}
+      <button onClick={() => setIsChatOpen(!isChatOpen)} className="fixed bottom-8 left-8 bg-[#d4af37] text-white p-4 rounded-full shadow-lg hover:bg-[#b8952f] hover:shadow-xl transition-all transform hover:-translate-y-1 focus:outline-none z-20">
+        <Bot size={32} />
+      </button>
+
+      {/* チャットパネル */}
+      {isChatOpen && (
+        <div className="fixed bottom-24 left-8 w-[calc(100vw-4rem)] sm:w-96 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col z-30 h-[500px] max-h-[70vh]">
+          <div className="bg-[#2c4c3b] p-3 text-white flex justify-between items-center shrink-0">
+            <h3 className="font-bold flex items-center gap-2"><Bot size={18} /> お寺案内AIアシスタント</h3>
+            <button onClick={() => setIsChatOpen(false)} className="hover:text-stone-300 transition-colors p-1 rounded-full"><X size={20} /></button>
+          </div>
+          <div ref={chatScrollRef} className="flex-grow p-4 overflow-y-auto bg-[#f9f8f6] space-y-4 flex flex-col">
+            {chatMessages.length === 0 && (
+              <div className="text-center text-stone-500 text-sm mt-4 bg-white p-4 rounded-xl shadow-sm border border-stone-100">
+                <Bot size={32} className="mx-auto mb-2 text-[#d4af37]" />
+                お寺の歴史、アクセス、おすすめの見どころなど、何でも聞いてください！
+              </div>
+            )}
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-[#2c4c3b] text-white rounded-tr-sm shadow-sm' : 'bg-white border border-stone-200 text-stone-700 rounded-tl-sm shadow-sm'}`}>
+                  <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                </div>
+              </div>
+            ))}
+            {isChatLoading && (
+              <div className="flex justify-start"><div className="bg-white border p-4 rounded-2xl rounded-tl-sm text-stone-500 flex gap-2"><div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div><div className="w-2 h-2 bg-stone-300 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div></div></div>
+            )}
+          </div>
+          <form onSubmit={handleChatSubmit} className="p-3 bg-white border-t flex gap-2 shrink-0">
+            <input type="text" placeholder="質問を入力..." className="flex-grow p-2.5 bg-[#f4f1eb] outline-none rounded-lg text-sm" value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={isChatLoading} />
+            <button type="submit" disabled={!chatInput.trim() || isChatLoading} className="p-2.5 bg-[#d4af37] text-white rounded-lg disabled:opacity-50 flex items-center justify-center shrink-0"><Send size={18} /></button>
+          </form>
+        </div>
+      )}
+
+      {/* フローティング追加ボタン */}
+      <button onClick={handleAddNew} className="fixed bottom-8 right-8 bg-[#2c4c3b] text-white p-4 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all z-20"><Plus size={32} /></button>
+      
+      {/* 記録追加・編集モーダル */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-[#f4f1eb] rounded-2xl w-full max-w-lg shadow-2xl p-6 relative">
+            <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-stone-400 hover:text-stone-600"><X size={28} /></button>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-[#2c4c3b]">{editingId ? <Pencil size={20}/> : <BookOpen size={20}/>} {editingId ? '記録を修正' : '新しい記録'}</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-1">お寺の名前 <span className="text-red-500">*</span></label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input required placeholder="例: 浅草寺" className="w-full p-3 rounded-lg border border-stone-300 outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                  <button type="button" onClick={() => fetchTempleInfo(formData.name)} disabled={!formData.name.trim() || isSearching} className="flex items-center justify-center gap-2 px-4 py-3 bg-[#e8e6e1] text-[#2c4c3b] font-bold rounded-lg border border-[#d1cec7] hover:bg-[#d1cec7] transition-colors disabled:opacity-50 whitespace-nowrap">
+                    {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />} ネット検索
+                  </button>
+                </div>
+                {searchError && <p className="text-red-500 text-sm mt-1">{searchError}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 mb-1">参拝日</label>
+                  <input type="date" className="w-full p-3 rounded-lg border border-stone-300 outline-none" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 mb-1">参拝者（ニックネーム）</label>
+                  <input placeholder="例: たろう" className="w-full p-3 rounded-lg border border-stone-300 outline-none" value={formData.userName} onChange={(e) => setFormData({...formData, userName: e.target.value})} />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-1">場所 (都道府県・市区町村)</label>
+                <input placeholder="例: 京都府京都市" className="w-full p-3 rounded-lg border border-stone-300 outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">評価・おすすめ度</label>
+                <StarRatingInput />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-1">思い出の写真</label>
+                <div className="bg-white p-3 rounded-lg border border-stone-300 flex items-center gap-4">
+                  <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-[#f4f1eb] rounded-lg text-sm font-bold hover:bg-[#e8e6e1] transition-colors">
+                    <ImageIcon className="text-stone-500" size={18} /> 写真を選択
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  {formData.image && (
+                    <div className="relative w-12 h-12 rounded border overflow-hidden">
+                      <img src={formData.image} alt="" className="w-full h-full object-cover"/>
+                      <button type="button" onClick={() => setFormData({...formData, image: null})} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X size={12}/></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-1">感想・メモ・御朱印の記録など</label>
+                <textarea rows="4" placeholder="感想など..." className="w-full p-3 rounded-lg border border-stone-300 resize-none outline-none focus:ring-2 focus:ring-[#2c4c3b]" value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})}></textarea>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-stone-300 text-stone-700 font-bold rounded-xl shadow-sm hover:bg-stone-400 transition-all">キャンセル</button>
+                <button type="submit" className="flex-1 py-4 bg-[#2c4c3b] text-white font-bold rounded-xl shadow-lg hover:bg-[#1e3629] transition-all">{editingId ? '変更を保存' : '記録を投稿'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
